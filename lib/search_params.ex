@@ -31,6 +31,10 @@ defmodule ExNominatim.SearchParams do
 
   @structured_query_fields [:amenity, :street, :city, :county, :state, :country, :postalcode]
 
+  def new(p) when is_list(p) do
+    Map.merge(%__MODULE__{}, Map.new(p))
+  end
+
   def freeform(p) when is_bitstring(p) do
     {:ok, %__MODULE__{q: p}}
   end
@@ -41,8 +45,9 @@ defmodule ExNominatim.SearchParams do
       |> Map.new(fn k -> {k, nil} end)
 
     {:ok,
-     Map.merge(%__MODULE__{}, Map.new(p))
-     |> Map.merge(nilify_structured)}
+     (is_list(p) && new(p)) ||
+       p
+       |> Map.merge(nilify_structured)}
   end
 
   def structured(p) when is_list(p) or is_map(p) do
@@ -57,8 +62,9 @@ defmodule ExNominatim.SearchParams do
 
       {true, false} ->
         {:ok,
-         Map.merge(%__MODULE__{}, Map.new(p))
-         |> Map.put(:q, nil)}
+         (is_list(p) && new(p)) ||
+           p
+           |> Map.put(:q, nil)}
     end
   end
 
@@ -89,5 +95,9 @@ defmodule ExNominatim.SearchParams do
 
   def cumulative_and(list) when is_list(list) do
     Enum.reduce(list, true, fn x, acc -> x and acc end)
+  end
+
+  def structured_query_fields do
+    @structured_query_fields
   end
 end

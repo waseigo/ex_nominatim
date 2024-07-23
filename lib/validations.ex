@@ -13,7 +13,43 @@ defmodule ExNominatim.Validations do
                     ","
                   )
 
+  @structured_query_fields [:amenity, :street, :city, :county, :state, :country, :postalcode]
+
   def validate(m) when is_map(m) do
+    with {:ok, validated} <- validate_all_fields(m),
+         {:ok, verified} <- verify_intent(validated) do
+      {:ok, sanitize_comma_separated_strings(verified)}
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def verify_intent(m) when is_map(m) do
+    is_freeform = not is_nil(m.q)
+
+    is_structured =
+      extract_structured_field_values(m)
+      |> Enum.filter(&(!is_nil(&1)))
+      |> List.to_string()
+      |> Kernel.!=("")
+
+    msg1 = "Must set either freeform or structured query parameters"
+    msg2 = " but not both"
+    {is_freeform, is_structured} |> IO.inspect()
+
+    case {is_freeform, is_structured} do
+      {true, false} -> {:ok, m}
+      {false, true} -> {:ok, m}
+      {false, false} -> {:error, {:missing_query_params, msg1}}
+      {true, true} -> {:error, {:confusing_intent, msg1 <> msg2}}
+    end
+  end
+
+  def extract_structured_field_values(p) when is_map(p) do
+    Map.take(p, @structured_query_fields) |> Map.values()
+  end
+
+  def validate_all_fields(m) when is_map(m) do
     permitted_keys(m)
     |> Enum.reduce_while(
       {:ok, m},
@@ -52,7 +88,7 @@ defmodule ExNominatim.Validations do
     message = "String to search for (non-empty)"
 
     cond do
-      is_nonempty_string?(v) -> {true, message}
+      nonempty_string?(v) -> {true, message}
       is_nil(v) -> {true, message}
       true -> {false, message}
     end
@@ -251,7 +287,7 @@ defmodule ExNominatim.Validations do
     )
   end
 
-  def is_nonempty_string?(s) do
+  def nonempty_string?(s) do
     is_bitstring(s) and s != ""
   end
 
