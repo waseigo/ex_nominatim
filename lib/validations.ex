@@ -1,5 +1,5 @@
 defmodule ExNominatim.Validations do
-  alias ExNominatim.SearchParams
+  alias ExNominatim.{SearchParams, ReverseParams}
 
   # Source: https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Officially_assigned_code_elements
   @iso_3166_1_alpha2 String.split(
@@ -15,7 +15,7 @@ defmodule ExNominatim.Validations do
 
   @structured_query_fields [:amenity, :street, :city, :county, :state, :country, :postalcode]
 
-  def validate(m) when is_map(m) do
+  def validate(m) when is_struct(m) do
     with {:ok, validated} <- validate_all_fields(m),
          {:ok, verified} <- verify_intent(validated) do
       {:ok, sanitize_comma_separated_strings(verified)}
@@ -24,7 +24,7 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def verify_intent(m) when is_map(m) do
+  def verify_intent(%SearchParams{} = m) do
     is_freeform = not is_nil(m.q)
 
     is_structured =
@@ -35,13 +35,36 @@ defmodule ExNominatim.Validations do
 
     msg1 = "Must set either freeform or structured query parameters"
     msg2 = " but not both"
-    {is_freeform, is_structured} |> IO.inspect()
 
     case {is_freeform, is_structured} do
       {true, false} -> {:ok, m}
       {false, true} -> {:ok, m}
       {false, false} -> {:error, {:missing_query_params, msg1}}
       {true, true} -> {:error, {:confusing_intent, msg1 <> msg2}}
+    end
+  end
+
+  def verify_intent(%ReverseParams{} = m) do
+    %{lat: lat, lon: lon} = Map.take(m, [:lat, :lon])
+
+    message = "Both latitude and longitude are required"
+
+    coords_ok? =
+      [lat, lon]
+      |> Enum.map(fn x ->
+        cond do
+          is_nil(x) -> false
+          is_float(x) -> true
+          nonempty_string?(x) -> true
+          true -> false
+        end
+      end)
+      |> cumulative_and()
+
+    if coords_ok? do
+      {:ok, m}
+    else
+      {:error, message}
     end
   end
 
@@ -73,6 +96,44 @@ defmodule ExNominatim.Validations do
   end
 
   def valid?(v, _) when is_nil(v), do: {true, nil}
+
+  def valid?(v, coord) when coord in [:lat, :lon] do
+    message = "Floating-point number or its bitstring representation"
+
+    lim = limits(coord)
+
+    cond do
+      is_float(v) and valid_number_value_ranged?(v, lim[:crit], limits(coord)) ->
+        {true, message}
+
+      nonempty_string?(v) ->
+        case Float.parse(v) do
+          :error -> {false, message}
+          {vf, _} -> valid?(vf, coord)
+        end
+
+      true ->
+        {false, message}
+    end
+  end
+
+  def valid?(v, :polygon_threshold) do
+    message = "Floating-point number (Default: 0.0)"
+
+    cond do
+      is_float(v) ->
+        {true, message}
+
+      nonempty_string?(v) ->
+        case Float.parse(v) do
+          :error -> {false, message}
+          {vf, _} -> valid?(vf, :polygon_threshold)
+        end
+
+      true ->
+        {false, message}
+    end
+  end
 
   def valid?(v, bitstring_field)
       when bitstring_field in [
@@ -153,25 +214,16 @@ defmodule ExNominatim.Validations do
 
   def valid?(v, :limit) do
     {
-      valid_integer_value_ranged?(v, :gtlte),
+      is_integer(v) and valid_number_value_ranged?(v, :gtelte, mn: 1, mx: 40),
       "Cannot be more than 40 (Default: 10)"
     }
   end
 
-  def valid?(v, :polygon_threshold) do
-    message = "Floating-point number (Default: 0.0)"
-
-    cond do
-      is_float(v) ->
-        {true, message}
-
-      is_bitstring(v) ->
-        {vf, _} = Float.parse(v)
-        valid?(vf, :polygon_threshold)
-
-      true ->
-        {false, message}
-    end
+  def valid?(v, :zoom) do
+    {
+      is_integer(v) and valid_number_value_ranged?(v, :gtelte, mn: 0, mx: 18),
+      "Integer 0 to 18 (Default: 18)"
+    }
   end
 
   def valid?(v, :email) do
@@ -215,10 +267,10 @@ defmodule ExNominatim.Validations do
     valid_integer_value_discrete?(vi, valid_values)
   end
 
-  def valid_integer_value_ranged?(v, crit, opts \\ [mn: 0, mx: 40])
+  def valid_number_value_ranged?(v, crit, opts \\ [mn: 0, mx: 40])
 
-  def valid_integer_value_ranged?(v, crit, opts)
-      when is_integer(v) and is_list(opts) and
+  def valid_number_value_ranged?(v, crit, opts)
+      when is_number(v) and is_list(opts) and
              crit in [:gt, :gte, :gtelt, :gtelte] do
     mn = Keyword.get(opts, :mn)
     mx = Keyword.get(opts, :mx)
@@ -231,8 +283,8 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def valid_integer_value_ranged?(v, crit, opts)
-      when is_integer(v) and is_list(opts) and
+  def valid_number_value_ranged?(v, crit, opts)
+      when is_number(v) and is_list(opts) and
              crit in [:gtlte, :gtlt, :lt, :lte] do
     mn = Keyword.get(opts, :mn)
     mx = Keyword.get(opts, :mx)
@@ -245,9 +297,18 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def valid_integer_value_ranged?(v, crit, opts) when is_bitstring(v) do
-    {vi, _} = Integer.parse(v)
-    valid_integer_value_ranged?(vi, crit, opts)
+  def valid_number_value_ranged?(v, crit, opts) when is_bitstring(v) do
+    vt =
+      case Keyword.get(opts, :type) do
+        :integer -> Integer.parse(v)
+        :float -> Float.parse(v)
+        _ -> :error
+      end
+
+    case vt do
+      :error -> false
+      {vt_ok, _} -> valid_number_value_ranged?(vt_ok, crit, opts)
+    end
   end
 
   def permitted_keys(m) when is_struct(m) do
@@ -265,7 +326,7 @@ defmodule ExNominatim.Validations do
     Enum.reduce(list, true, fn x, acc -> x and acc end)
   end
 
-  def sanitize_comma_separated_strings(%SearchParams{} = query) do
+  def sanitize_comma_separated_strings(query) when is_struct(query) do
     [:layer, :countrycodes, :exclude_place_ids, :viewbox]
     |> Enum.reduce(
       query,
@@ -297,4 +358,7 @@ defmodule ExNominatim.Validations do
     |> Enum.reject(&(&1 == ""))
     |> List.to_string()
   end
+
+  def limits(:lat), do: [mn: -90.0, mx: 90.0, crit: :gtelte]
+  def limits(:lon), do: [mn: -180.0, mx: 180.0, crit: :gtelt]
 end

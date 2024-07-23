@@ -1,1 +1,1 @@
-alias ExNominatim.{API, HTTP}
+alias ExNominatim.{API, HTTP, ReverseParams, SearchParams}

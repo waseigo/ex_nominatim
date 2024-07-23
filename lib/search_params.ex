@@ -25,6 +25,7 @@ defmodule ExNominatim.SearchParams do
     :polygon_text,
     :polygon_threshold,
     :email,
+    :dedupe,
     :debug,
     format: "jsonv2"
   ]
@@ -32,7 +33,15 @@ defmodule ExNominatim.SearchParams do
   @structured_query_fields [:amenity, :street, :city, :county, :state, :country, :postalcode]
 
   def new(p) when is_list(p) do
-    Map.merge(%__MODULE__{}, Map.new(p))
+    if Keyword.keyword?(p) do
+      new(Map.new(p))
+    else
+      {:error, :improper_list}
+    end
+  end
+
+  def new(p) when is_map(p) do
+    {:ok, Map.merge(%__MODULE__{}, p)}
   end
 
   def freeform(p) when is_bitstring(p) do
@@ -40,19 +49,22 @@ defmodule ExNominatim.SearchParams do
   end
 
   def freeform(p) when is_list(p) or is_map(p) do
-    nilify_structured =
-      @structured_query_fields
-      |> Map.new(fn k -> {k, nil} end)
+    case new(p) do
+      {:ok, ps} ->
+        nilify_structured =
+          @structured_query_fields
+          |> Map.new(fn k -> {k, nil} end)
 
-    {:ok,
-     (is_list(p) && new(p)) ||
-       p
-       |> Map.merge(nilify_structured)}
+        Map.merge(ps, nilify_structured)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   def structured(p) when is_list(p) or is_map(p) do
     x = extract_structured_field_values(p)
-
+    # FIXME improve this a la freeform/1
     case {all_bitstrings_or_nil?(x), all_empty?(x)} do
       {false, _} ->
         {:error, :invalid_values}
@@ -95,9 +107,5 @@ defmodule ExNominatim.SearchParams do
 
   def cumulative_and(list) when is_list(list) do
     Enum.reduce(list, true, fn x, acc -> x and acc end)
-  end
-
-  def structured_query_fields do
-    @structured_query_fields
   end
 end
