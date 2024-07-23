@@ -1,0 +1,1 @@
+alias ExNominatim.{API, HTTP}
