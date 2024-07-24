@@ -1,5 +1,5 @@
 defmodule ExNominatim.Validations do
-  alias ExNominatim.{SearchParams, ReverseParams}
+  alias ExNominatim.Client.{SearchParams, ReverseParams, StatusParams}
 
   # Source: https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Officially_assigned_code_elements
   @iso_3166_1_alpha2 String.split(
@@ -16,13 +16,15 @@ defmodule ExNominatim.Validations do
   @structured_query_fields [:amenity, :street, :city, :county, :state, :country, :postalcode]
 
   def validate(m) when is_struct(m) do
-    with {:ok, validated} <- validate_all_fields(m),
-         {:ok, verified} <- verify_intent(validated) do
+    with %{valid?: true} = validated <- validate_all_fields(m),
+         %{valid?: true} = verified <- verify_intent(validated) do
       {:ok, sanitize_comma_separated_strings(verified)}
     else
-      {:error, reason} -> {:error, reason}
+      %{valid?: false} = mi -> {:error, mi}
     end
   end
+
+  def verify_intent(%StatusParams{} = m), do: m
 
   def verify_intent(%SearchParams{} = m) do
     is_freeform = not is_nil(m.q)
@@ -33,21 +35,18 @@ defmodule ExNominatim.Validations do
       |> List.to_string()
       |> Kernel.!=("")
 
-    msg1 = "Must set either freeform or structured query parameters"
-    msg2 = " but not both"
+    message = "Must set either freeform or structured query parameters (and not both)"
 
     case {is_freeform, is_structured} do
-      {true, false} -> {:ok, m}
-      {false, true} -> {:ok, m}
-      {false, false} -> {:error, {:missing_query_params, msg1}}
-      {true, true} -> {:error, {:confusing_intent, msg1 <> msg2}}
+      {true, false} -> m
+      {false, true} -> m
+      {false, false} -> invalidate(m, :missing_query_params, message)
+      {true, true} -> invalidate(m, :confusing_intent, message)
     end
   end
 
   def verify_intent(%ReverseParams{} = m) do
     %{lat: lat, lon: lon} = Map.take(m, [:lat, :lon])
-
-    message = "Both latitude and longitude are required"
 
     coords_ok? =
       [lat, lon]
@@ -61,25 +60,38 @@ defmodule ExNominatim.Validations do
       end)
       |> cumulative_and()
 
-    if coords_ok? do
-      {:ok, m}
-    else
-      {:error, message}
+    case coords_ok? do
+      [true, true] ->
+        m
+
+      [false, true] ->
+        invalidate(m, :missing_query_params, explain(:lat))
+
+      [true, false] ->
+        invalidate(m, :missing_query_params, explain(:lon))
+
+      [false, false] ->
+        invalidate(m, :missing_query_params, "Both latitude and longitude are required")
     end
+  end
+
+  def invalidate(m, err_key, err_msg)
+      when is_struct(m) and is_atom(err_key) and is_bitstring(err_msg) do
+    %{m | valid?: false, errors: [{err_key, err_msg} | m.errors]}
   end
 
   def extract_structured_field_values(p) when is_map(p) do
     Map.take(p, @structured_query_fields) |> Map.values()
   end
 
-  def validate_all_fields(m) when is_map(m) do
+  def validate_all_fields(m) when is_struct(m) do
     permitted_keys(m)
-    |> Enum.reduce_while(
-      {:ok, m},
+    |> Enum.reduce(
+      %{m | valid?: true, errors: []},
       fn k, acc ->
-        case validate_field(k, m) do
-          {:ok, _} -> {:cont, acc}
-          {:error, reason} -> {:halt, {:error, reason}}
+        case validate_field(k, acc) do
+          {:ok, _} -> %{acc | valid?: acc.valid? and true}
+          {:error, {err_key, err_msg}} -> invalidate(acc, err_key, err_msg)
         end
       end
     )
@@ -90,7 +102,7 @@ defmodule ExNominatim.Validations do
          {:valid?, {true, _}} <- {:valid?, valid?(Map.get(m, k), k)} do
       {:ok, m}
     else
-      {:permitted?, false} -> {:error, :invalid_key}
+      {:permitted?, false} -> {:error, {k, :invalid_key}}
       {:valid?, {false, message}} -> {:error, {k, message}}
     end
   end
@@ -98,7 +110,7 @@ defmodule ExNominatim.Validations do
   def valid?(v, _) when is_nil(v), do: {true, nil}
 
   def valid?(v, coord) when coord in [:lat, :lon] do
-    message = "Floating-point number or its bitstring representation"
+    message = explain(coord)
 
     lim = limits(coord)
 
@@ -117,8 +129,8 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def valid?(v, :polygon_threshold) do
-    message = "Floating-point number (Default: 0.0)"
+  def valid?(v, :polygon_threshold = k) do
+    message = explain(k)
 
     cond do
       is_float(v) ->
@@ -127,7 +139,7 @@ defmodule ExNominatim.Validations do
       nonempty_string?(v) ->
         case Float.parse(v) do
           :error -> {false, message}
-          {vf, _} -> valid?(vf, :polygon_threshold)
+          {vf, _} -> valid?(vf, k)
         end
 
       true ->
@@ -146,7 +158,7 @@ defmodule ExNominatim.Validations do
              :country,
              :postalcode
            ] do
-    message = "String to search for (non-empty)"
+    message = explain(bitstring_field)
 
     cond do
       nonempty_string?(v) -> {true, message}
@@ -168,37 +180,37 @@ defmodule ExNominatim.Validations do
              :dedupe,
              :debug
            ] do
-    message = "0 or 1"
+    message = explain(zero_one_field)
     {valid_integer_value_discrete?(v), message}
   end
 
-  def valid?(v, :format) do
+  def valid?(v, :format = k) do
     {
       v in ~w|xml json jsonv2 geojson geocodejson|,
-      "One of: xml, json, jsonv2, geojson, geocodejson (Default: jsonv2)"
+      explain(k)
     }
   end
 
-  def valid?(v, :featureType) do
+  def valid?(v, :featureType = k) do
     {
       v in ~w|country state city settlement|,
-      "One of: country, state, city, settlement (Default: unset)"
+      explain(k)
     }
   end
 
-  def valid?(v, :layer) do
+  def valid?(v, :layer = k) do
     layers = ~w|address poi railway natural manmade|
 
     {
       comma_separated_strings_to_list(v)
       |> Enum.map(fn x -> x in layers end)
       |> cumulative_and(),
-      "Comma-separated list of: address, poi, railway, natural, manmade (Default: unset (no restriction))"
+      explain(k)
     }
   end
 
-  def valid?(v, :countrycodes) do
-    message = "Comma-separated list of ISO 3166-1 alpha-2 country codes (Default: unset)"
+  def valid?(v, :countrycodes = k) do
+    message = explain(k)
 
     if is_bitstring(v) do
       {
@@ -212,22 +224,23 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def valid?(v, :limit) do
+  def valid?(v, :limit = k) do
     {
       is_integer(v) and valid_number_value_ranged?(v, :gtelte, mn: 1, mx: 40),
-      "Cannot be more than 40 (Default: 10)"
+      explain(k)
     }
   end
 
-  def valid?(v, :zoom) do
+  def valid?(v, :zoom = k) do
     {
-      is_integer(v) and valid_number_value_ranged?(v, :gtelte, mn: 0, mx: 18),
-      "Integer 0 to 18 (Default: 18)"
+      is_integer(v) and
+        valid_integer_value_discrete?(v, List.flatten([3, 5, 8, 10] ++ Enum.uniq(12..18))),
+      explain(k)
     }
   end
 
-  def valid?(v, :email) do
-    message = "Valid email address (Default: unset)"
+  def valid?(v, :email = k) do
+    message = explain(k)
 
     if is_bitstring(v) do
       {
@@ -239,9 +252,8 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def valid?(v, :accept_language) do
-    message =
-      "Browser language string consisting of ISO 639-1 Set 1 codes (Default: content of \"Accept-Language\" HTTP header)"
+  def valid?(v, :accept_language = k) do
+    message = explain(k)
 
     if is_bitstring(v) do
       {
@@ -254,6 +266,8 @@ defmodule ExNominatim.Validations do
       {false, message}
     end
   end
+
+  def valid?(_, _), do: {true, nil}
 
   def valid_integer_value_discrete?(v, valid_values \\ [0, 1])
 
@@ -312,7 +326,7 @@ defmodule ExNominatim.Validations do
   end
 
   def permitted_keys(m) when is_struct(m) do
-    m |> Map.from_struct() |> Map.keys()
+    m |> Map.from_struct() |> Map.keys() |> Kernel.--([:valid?, :errors])
   end
 
   def comma_separated_strings_to_list(v) when is_bitstring(v) do
@@ -361,4 +375,69 @@ defmodule ExNominatim.Validations do
 
   def limits(:lat), do: [mn: -90.0, mx: 90.0, crit: :gtelte]
   def limits(:lon), do: [mn: -180.0, mx: 180.0, crit: :gtelt]
+
+  def explain(k) when is_atom(k) do
+    zero_or_one = ", 0 or 1"
+
+    opt_sq = " (optional for structured query)"
+
+    %{
+      q: "Free-form query string to search for (mutually exclusive with structured query fields)",
+      amenity: "Name and/or type of POI" <> opt_sq,
+      street: "Housenumber and streetname" <> opt_sq,
+      city: "City" <> opt_sq,
+      county: "County" <> opt_sq,
+      state: "State" <> opt_sq,
+      country: "Country" <> opt_sq,
+      postalcode: "Postal code" <> opt_sq,
+      limit: "Limit the maximum number of returned results. Integer, 1 to 40" <> default(10),
+      addressdetails:
+        "Include a breakdown of the address into elements" <> zero_or_one <> default(0),
+      extratags:
+        "Include any additional information in the result that is available in the database" <>
+          zero_or_one <> default(0),
+      namedetails: "Include a full list of names for the result" <> zero_or_one <> default(0),
+      accept_language:
+        "Browser language string consisting of ISO 639-1 Set 1 codes" <>
+          default("content of Accept-Language HTTP header"),
+      countrycodes: "Comma-separated list of ISO 3166-1 alpha-2 country codes" <> default(),
+      layer:
+        "Comma-separated list of: address, poi, railway, natural, manmade" <>
+          default() <> " (no restriction)",
+      featureType: "One of: country, state, city, settlement" <> default(),
+      exclude_place_ids: "Comma-separated list of place_id items to skip" <> default(),
+      viewbox:
+        "Boost parameter which focuses the search on the given area. <x1>,<y1>,<x2>,<y2> where x is longitude and y is latitude" <>
+          default(),
+      bounded: "Exclude any results outside the viewbox" <> zero_or_one <> default(0),
+      polygon_geojson: polygon_output_message("GeoJSON"),
+      polygon_kml: polygon_output_message("KML"),
+      polygon_svg: polygon_output_message("SVG"),
+      polygon_text: polygon_output_message("text"),
+      polygon_threshold:
+        "Tolerance in degrees with which the simplified geometry may differ from the original geometry, floating-point number" <>
+          default(0.0),
+      email: "Valid email address (if making a large number of requests)" <> default(),
+      dedupe: "Toggle the deduplication mechanism" <> zero_or_one <> default(1),
+      debug: "Output assorted developer debug information in HTML" <> zero_or_one <> default(0),
+      lat: "Floating-point number in range [-90, 90] (or its string representation)",
+      lon: "Floating-point number in range [-180, 180) (or its string representation)",
+      zoom: "Level of detail required for the address [3, 5, 8, 10, 12..18]" <> default(18),
+      format:
+        "One of: xml, json, jsonv2, geojson, geocodejson (Default: jsonv2 for /search, xml for /reverse)"
+    }
+    |> Map.get(k)
+  end
+
+  def polygon_output_message(format) when is_bitstring(format) do
+    "Polygon output in " <> format <> ", 0 or 1" <> default(0)
+  end
+
+  def default(v) when is_bitstring(v) do
+    " (Default: " <> v <> ")"
+  end
+
+  def default(v) when is_number(v), do: default(to_string(v))
+
+  def default, do: default("unset")
 end

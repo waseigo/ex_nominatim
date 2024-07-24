@@ -4,7 +4,7 @@ defmodule ExNominatim.HTTP do
   def prepare(endpoint, params, base_url)
       when endpoint in @endpoints and is_map(params) and params != %{} and is_bitstring(base_url) do
     with {:ok, %Req.Request{} = req} <- base(base_url) do
-      params = keep_nonnil_params(params)
+      params = keep_query_params(params)
 
       {:ok,
        req
@@ -70,11 +70,11 @@ defmodule ExNominatim.HTTP do
 
   defp endpoint_url(endpoint) when is_atom(endpoint), do: to_string(endpoint)
 
-  def keep_nonnil_params(m) when is_struct(m) do
-    m |> Map.from_struct() |> keep_nonnil_params()
+  def keep_query_params(m) when is_struct(m) do
+    m |> Map.from_struct() |> keep_query_params()
   end
 
-  def keep_nonnil_params(m) when is_map(m) do
-    Map.filter(m, fn {_k, v} -> not is_nil(v) end)
+  def keep_query_params(m) when is_map(m) do
+    Map.filter(m, fn {k, v} -> not (is_nil(v) or k in [:errors, :valid?]) end)
   end
 end

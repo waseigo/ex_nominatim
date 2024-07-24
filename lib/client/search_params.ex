@@ -1,4 +1,4 @@
-defmodule ExNominatim.SearchParams do
+defmodule ExNominatim.Client.SearchParams do
   defstruct [
     :q,
     :amenity,
@@ -27,22 +27,16 @@ defmodule ExNominatim.SearchParams do
     :email,
     :dedupe,
     :debug,
-    format: "jsonv2"
+    format: "jsonv2",
+    valid?: nil,
+    errors: []
   ]
 
   @structured_query_fields [:amenity, :street, :city, :county, :state, :country, :postalcode]
 
-  def new(p) when is_list(p) do
-    if Keyword.keyword?(p) do
-      new(Map.new(p))
-    else
-      {:error, :improper_list}
-    end
-  end
+  @required []
 
-  def new(p) when is_map(p) do
-    {:ok, Map.merge(%__MODULE__{}, p)}
-  end
+  def new(p), do: ExNominatim.Client.new(p, @required, __MODULE__)
 
   def freeform(p) when is_bitstring(p) do
     {:ok, %__MODULE__{q: p}}
