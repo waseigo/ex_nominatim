@@ -1,11 +1,12 @@
 defmodule ExNominatim.Client do
   alias ExNominatim.{HTTP, Validations}
   @default_base_url "http://localhost:8080"
-  @implemented_endpoints [:search, :reverse, :status]
+  @implemented_endpoints [:search, :reverse, :status, :lookup]
 
   def search(params), do: generic(:search, params)
   def reverse(params), do: generic(:reverse, params)
-  def status(params), do: generic(:status, Keyword.put(params, :force, true))
+  def lookup(params), do: generic(:lookup, params)
+  def status(params \\ [format: "text"]), do: generic(:status, params)
 
   defp generic(action, params) when is_list(params) and action in @implemented_endpoints do
     s = get_module(action)

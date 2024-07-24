@@ -1,5 +1,6 @@
 defmodule ExNominatim.Client.LookupParams do
   defstruct [
+    :osm_ids,
     :addressdetails,
     :extratags,
     :namedetails,
@@ -16,20 +17,7 @@ defmodule ExNominatim.Client.LookupParams do
     errors: []
   ]
 
-  @required_fields [:osm_ids]
+  @required [:osm_ids]
 
-  def new(p) when is_list(p) do
-    with {:keyword?, true} <- {:keyword?, Keyword.keyword?(p)},
-         {:required, @required_fields} <-
-           {:required, p |> Keyword.take(@required_fields) |> Keyword.keys()} do
-      new(Map.new(p))
-    else
-      {:keyword?, false} -> {:error, :improper_list}
-      {:required, _} -> {:error, :missing_query_params}
-    end
-  end
-
-  def new(p) when is_map(p) do
-    {:ok, Map.merge(%__MODULE__{}, p)}
-  end
+  def new(p), do: ExNominatim.Client.new(p, @required, __MODULE__)
 end

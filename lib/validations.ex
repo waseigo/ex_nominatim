@@ -1,4 +1,5 @@
 defmodule ExNominatim.Validations do
+  alias ExNominatim.Client.LookupParams
   alias ExNominatim.Client.{SearchParams, ReverseParams, StatusParams}
 
   # Source: https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Officially_assigned_code_elements
@@ -22,6 +23,11 @@ defmodule ExNominatim.Validations do
     else
       %{valid?: false} = mi -> {:error, mi}
     end
+  end
+
+  def verify_intent(%LookupParams{} = m) do
+    osm_ids = Map.get(m, :osm_ids)
+    if is_bitstring(osm_ids), do: m, else: invalidate(m, :missing_query_params, explain(:osm_ids))
   end
 
   def verify_intent(%StatusParams{} = m), do: m
@@ -184,9 +190,20 @@ defmodule ExNominatim.Validations do
     {valid_integer_value_discrete?(v), message}
   end
 
+  def valid?(v, :osm_ids = k) do
+    message = explain(k)
+
+    with true <- is_bitstring(v),
+         true <- validate_osm_ids(v) do
+      {true, message}
+    else
+      false -> {false, message}
+    end
+  end
+
   def valid?(v, :format = k) do
     {
-      v in ~w|xml json jsonv2 geojson geocodejson|,
+      v in ~w|xml json jsonv2 geojson geocodejson text|,
       explain(k)
     }
   end
@@ -331,9 +348,21 @@ defmodule ExNominatim.Validations do
 
   def comma_separated_strings_to_list(v) when is_bitstring(v) do
     v
-    |> String.downcase()
+    # |> String.downcase()
     |> String.split(",")
     |> Enum.map(&String.trim/1)
+  end
+
+  def validate_osm_ids(osm_ids) when is_bitstring(osm_ids) do
+    osm_ids
+    |> comma_separated_strings_to_list()
+    |> Enum.map(&validate_osm_id_single/1)
+    |> cumulative_and()
+  end
+
+  def validate_osm_id_single(osm_id) when is_bitstring(osm_id) do
+    r = ~r/^[NWR]\d+$/
+    Regex.match?(r, osm_id)
   end
 
   def cumulative_and(list) when is_list(list) do
@@ -341,7 +370,7 @@ defmodule ExNominatim.Validations do
   end
 
   def sanitize_comma_separated_strings(query) when is_struct(query) do
-    [:layer, :countrycodes, :exclude_place_ids, :viewbox]
+    [:layer, :countrycodes, :exclude_place_ids, :viewbox, :osm_ids]
     |> Enum.reduce(
       query,
       fn k, acc ->
@@ -423,8 +452,10 @@ defmodule ExNominatim.Validations do
       lat: "Floating-point number in range [-90, 90] (or its string representation)",
       lon: "Floating-point number in range [-180, 180) (or its string representation)",
       zoom: "Level of detail required for the address [3, 5, 8, 10, 12..18]" <> default(18),
+      osm_ids:
+        "Comma-separated list of up to 50 OSM ids each prefixed with its type, one of node(N), way(W) or relation(R).",
       format:
-        "One of: xml, json, jsonv2, geojson, geocodejson (Default: jsonv2 for /search, xml for /reverse)"
+        "One of: xml, json, jsonv2, geojson, geocodejson, text (Default: jsonv2 for /search, xml for /reverse, text only for /status)"
     }
     |> Map.get(k)
   end

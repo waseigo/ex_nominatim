@@ -12,7 +12,11 @@ defmodule ExNominatim do
       :world
 
   """
-  def hello do
-    :world
-  end
+  defdelegate search(params), to: ExNominatim.Client
+
+  defdelegate reverse(params), to: ExNominatim.Client
+
+  defdelegate lookup(params), to: ExNominatim.Client
+
+  defdelegate status(params \\ [format: "text"]), to: ExNominatim.Client
 end
