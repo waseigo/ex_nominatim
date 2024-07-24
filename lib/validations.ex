@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2024 Isaak Tsalicoglou <isaak@overbring.com>
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule ExNominatim.Validations do
   alias ExNominatim.Client.{
     SearchParams,
@@ -6,6 +9,11 @@ defmodule ExNominatim.Validations do
     DetailsParams,
     LookupParams
   }
+
+  @moduledoc """
+  Functions used for the automatic validation of the keys of a request parameters struct according to the target endpoint, their values according to the API endpoint's specification, and invalidate any request parameters with confusing intent that might have unexpected results, such as defining both the `:q` free-form query parameter and at least one of the parameters of a structured query (`:city`, `:country`, etc.).
+  """
+  @moduledoc since: "1.0.0"
 
   # Source: https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Officially_assigned_code_elements
   @iso_3166_1_alpha2 String.split(
@@ -23,6 +31,11 @@ defmodule ExNominatim.Validations do
 
   @osm_detail_fields [:osmtype, :osmid]
 
+  @doc """
+  Validates the content and intent of a request represented by a request parameters struct `m` (one of `SearchParams`, `ReverseParams`, etc.).
+
+  You can use this function directly if you want to combine it with `ExNominatim.HTTP.prepare/3`.
+  """
   def validate(m) when is_struct(m) do
     with %{valid?: true} = validated <- validate_all_fields(m),
          %{valid?: true} = verified <- verify_intent(validated) do
@@ -32,9 +45,36 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def verify_intent_bifurcated_helper(m, single_field_a, multiple_fields_b, scope_b, message)
-      when is_struct(m) and is_atom(single_field_a) and is_list(multiple_fields_b) and
-             is_bitstring(message) do
+  @doc """
+  Sanitizes the values of those fields that (according to the Nominatim API spec) contain a comma-separated list of strings. It collapses all spaces and trims and leading and trailing commas.
+
+  You can use this function directly if you want to combine it with `ExNominatim.Validations.validate/1`.
+  """
+  def sanitize_comma_separated_strings(query) when is_struct(query) do
+    [:layer, :countrycodes, :exclude_place_ids, :viewbox, :osm_ids]
+    |> Enum.reduce(
+      query,
+      fn k, acc ->
+        v = Map.get(acc, k)
+
+        if is_bitstring(v) do
+          Map.put(
+            acc,
+            k,
+            v
+            |> collapse_spaces()
+            |> String.trim(",")
+          )
+        else
+          acc
+        end
+      end
+    )
+  end
+
+  defp verify_intent_bifurcated_helper(m, single_field_a, multiple_fields_b, scope_b, message)
+       when is_struct(m) and is_atom(single_field_a) and is_list(multiple_fields_b) and
+              is_bitstring(message) do
     option_a = not is_nil(Map.get(m, single_field_a))
 
     option_b =
@@ -52,7 +92,7 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def all_some_or_none(fields, reference) do
+  defp all_some_or_none(fields, reference) do
     cond do
       fields == [] -> :none
       valid_number_value_ranged?(length(fields), :gtelt, mn: 1, mx: length(reference)) -> :some
@@ -60,14 +100,14 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def verify_intent(%LookupParams{} = m) do
+  defp verify_intent(%LookupParams{} = m) do
     osm_ids = Map.get(m, :osm_ids)
     if is_bitstring(osm_ids), do: m, else: invalidate(m, :missing_query_params, explain(:osm_ids))
   end
 
-  def verify_intent(%StatusParams{} = m), do: m
+  defp verify_intent(%StatusParams{} = m), do: m
 
-  def verify_intent(%SearchParams{} = m) do
+  defp verify_intent(%SearchParams{} = m) do
     verify_intent_bifurcated_helper(
       m,
       :q,
@@ -77,7 +117,7 @@ defmodule ExNominatim.Validations do
     )
   end
 
-  def verify_intent(%DetailsParams{} = m) do
+  defp verify_intent(%DetailsParams{} = m) do
     verify_intent_bifurcated_helper(
       m,
       :place_id,
@@ -87,7 +127,7 @@ defmodule ExNominatim.Validations do
     )
   end
 
-  def verify_intent(%ReverseParams{} = m) do
+  defp verify_intent(%ReverseParams{} = m) do
     %{lat: lat, lon: lon} = Map.take(m, [:lat, :lon])
 
     coords_ok? =
@@ -116,16 +156,16 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def invalidate(m, err_key, err_msg)
-      when is_struct(m) and is_atom(err_key) and is_bitstring(err_msg) do
+  defp invalidate(m, err_key, err_msg)
+       when is_struct(m) and is_atom(err_key) and is_bitstring(err_msg) do
     %{m | valid?: false, errors: [{err_key, err_msg} | m.errors]}
   end
 
-  def extract_values(p, fields) when is_map(p) and is_list(fields) do
+  defp extract_values(p, fields) when is_map(p) and is_list(fields) do
     Map.take(p, fields) |> Map.values()
   end
 
-  def validate_all_fields(m) when is_struct(m) do
+  defp validate_all_fields(m) when is_struct(m) do
     permitted_keys(m)
     |> Enum.reduce(
       %{m | valid?: true, errors: []},
@@ -138,7 +178,7 @@ defmodule ExNominatim.Validations do
     )
   end
 
-  def validate_field(k, m) when is_atom(k) and is_map(m) do
+  defp validate_field(k, m) when is_atom(k) and is_map(m) do
     with {:permitted?, true} <- {:permitted?, k in permitted_keys(m)},
          {:valid?, {true, _}} <- {:valid?, valid?(Map.get(m, k), k)} do
       {:ok, m}
@@ -148,9 +188,9 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def valid?(v, _) when is_nil(v), do: {true, nil}
+  defp valid?(v, _) when is_nil(v), do: {true, nil}
 
-  def valid?(v, k) when k in [:lat, :lon, :polygon_threshold] do
+  defp valid?(v, k) when k in [:lat, :lon, :polygon_threshold] do
     lim = limits(k)
 
     {
@@ -159,7 +199,7 @@ defmodule ExNominatim.Validations do
     }
   end
 
-  def valid?(v, :osmtype = k) do
+  defp valid?(v, :osmtype = k) do
     message = explain(k)
 
     if is_bitstring(v) do
@@ -172,21 +212,21 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def valid?(v, :osmid = k) do
+  defp valid?(v, :osmid = k) do
     {number_or_its_string(v, :integer), explain(k)}
   end
 
-  def valid?(v, bitstring_field)
-      when bitstring_field in [
-             :q,
-             :amenity,
-             :street,
-             :city,
-             :county,
-             :state,
-             :country,
-             :postalcode
-           ] do
+  defp valid?(v, bitstring_field)
+       when bitstring_field in [
+              :q,
+              :amenity,
+              :street,
+              :city,
+              :county,
+              :state,
+              :country,
+              :postalcode
+            ] do
     message = explain(bitstring_field)
 
     cond do
@@ -196,29 +236,29 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def valid?(v, zero_one_field)
-      when zero_one_field in [
-             :addressdetails,
-             :extratags,
-             :namedetails,
-             :bounded,
-             :pretty,
-             :keywords,
-             :linkedplaces,
-             :hierarchy,
-             :group_hierarchy,
-             :polygon_geojson,
-             :polygon_kml,
-             :polygon_svg,
-             :polygon_text,
-             :dedupe,
-             :debug
-           ] do
+  defp valid?(v, zero_one_field)
+       when zero_one_field in [
+              :addressdetails,
+              :extratags,
+              :namedetails,
+              :bounded,
+              :pretty,
+              :keywords,
+              :linkedplaces,
+              :hierarchy,
+              :group_hierarchy,
+              :polygon_geojson,
+              :polygon_kml,
+              :polygon_svg,
+              :polygon_text,
+              :dedupe,
+              :debug
+            ] do
     message = explain(zero_one_field)
     {valid_integer_value_discrete?(v), message}
   end
 
-  def valid?(v, :osm_ids = k) do
+  defp valid?(v, :osm_ids = k) do
     message = explain(k)
 
     with true <- is_bitstring(v),
@@ -229,21 +269,21 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def valid?(v, :format = k) do
+  defp valid?(v, :format = k) do
     {
       v in ~w|xml json jsonv2 geojson geocodejson text|,
       explain(k)
     }
   end
 
-  def valid?(v, :featureType = k) do
+  defp valid?(v, :featureType = k) do
     {
       v in ~w|country state city settlement|,
       explain(k)
     }
   end
 
-  def valid?(v, :layer = k) do
+  defp valid?(v, :layer = k) do
     layers = ~w|address poi railway natural manmade|
 
     {
@@ -254,7 +294,7 @@ defmodule ExNominatim.Validations do
     }
   end
 
-  def valid?(v, :countrycodes = k) do
+  defp valid?(v, :countrycodes = k) do
     message = explain(k)
 
     if is_bitstring(v) do
@@ -269,14 +309,14 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def valid?(v, :limit = k) do
+  defp valid?(v, :limit = k) do
     {
       is_integer(v) and valid_number_value_ranged?(v, :gtelte, mn: 1, mx: 40),
       explain(k)
     }
   end
 
-  def valid?(v, :zoom = k) do
+  defp valid?(v, :zoom = k) do
     {
       is_integer(v) and
         valid_integer_value_discrete?(v, List.flatten([3, 5, 8, 10] ++ Enum.uniq(12..18))),
@@ -284,7 +324,7 @@ defmodule ExNominatim.Validations do
     }
   end
 
-  def valid?(v, :email = k) do
+  defp valid?(v, :email = k) do
     message = explain(k)
 
     if is_bitstring(v) do
@@ -297,7 +337,7 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def valid?(v, :accept_language = k) do
+  defp valid?(v, :accept_language = k) do
     message = explain(k)
 
     if is_bitstring(v) do
@@ -312,25 +352,23 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def valid?(_, _), do: {true, nil}
+  defp valid?(_, _), do: {true, nil}
 
-  def valid_integer_value_discrete?(v, valid_values \\ [0, 1])
+  defp valid_integer_value_discrete?(v, valid_values \\ [0, 1])
 
-  def valid_integer_value_discrete?(v, valid_values)
-      when is_integer(v) and is_list(valid_values) do
+  defp valid_integer_value_discrete?(v, valid_values)
+       when is_integer(v) and is_list(valid_values) do
     v in valid_values
   end
 
-  def valid_integer_value_discrete?(v, valid_values) when is_bitstring(v) do
+  defp valid_integer_value_discrete?(v, valid_values) when is_bitstring(v) do
     {vi, _} = Integer.parse(v)
     valid_integer_value_discrete?(vi, valid_values)
   end
 
-  def valid_number_value_ranged?(v, crit, opts \\ [mn: 0, mx: 40])
-
-  def valid_number_value_ranged?(v, crit, opts)
-      when is_number(v) and is_list(opts) and
-             crit in [:gt, :gte, :gtelt, :gtelte] do
+  defp valid_number_value_ranged?(v, crit, opts)
+       when is_number(v) and is_list(opts) and
+              crit in [:gt, :gte, :gtelt, :gtelte] do
     mn = Keyword.get(opts, :mn)
     mx = Keyword.get(opts, :mx)
 
@@ -342,9 +380,9 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def valid_number_value_ranged?(v, crit, opts)
-      when is_number(v) and is_list(opts) and
-             crit in [:gtlte, :gtlt, :lt, :lte] do
+  defp valid_number_value_ranged?(v, crit, opts)
+       when is_number(v) and is_list(opts) and
+              crit in [:gtlte, :gtlt, :lt, :lte] do
     mn = Keyword.get(opts, :mn)
     mx = Keyword.get(opts, :mx)
 
@@ -356,7 +394,7 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def valid_number_value_ranged?(v, crit, opts) when is_bitstring(v) do
+  defp valid_number_value_ranged?(v, crit, opts) when is_bitstring(v) do
     vt =
       case Keyword.get(opts, :type) do
         :integer -> Integer.parse(v)
@@ -374,55 +412,33 @@ defmodule ExNominatim.Validations do
     m |> Map.from_struct() |> Map.keys() |> Kernel.--([:valid?, :errors])
   end
 
-  def comma_separated_strings_to_list(v) when is_bitstring(v) do
+  defp comma_separated_strings_to_list(v) when is_bitstring(v) do
     v
     |> String.split(",")
     |> Enum.map(&String.trim/1)
   end
 
-  def validate_osm_ids(osm_ids) when is_bitstring(osm_ids) do
+  defp validate_osm_ids(osm_ids) when is_bitstring(osm_ids) do
     osm_ids
     |> comma_separated_strings_to_list()
     |> Enum.map(&validate_osm_id_single/1)
     |> cumulative_and()
   end
 
-  def validate_osm_id_single(osm_id) when is_bitstring(osm_id) do
+  defp validate_osm_id_single(osm_id) when is_bitstring(osm_id) do
     r = ~r/^[NWR]\d+$/
     Regex.match?(r, osm_id)
   end
 
-  def cumulative_and(list) when is_list(list) do
+  defp cumulative_and(list) when is_list(list) do
     Enum.reduce(list, true, fn x, acc -> x and acc end)
   end
 
-  def sanitize_comma_separated_strings(query) when is_struct(query) do
-    [:layer, :countrycodes, :exclude_place_ids, :viewbox, :osm_ids]
-    |> Enum.reduce(
-      query,
-      fn k, acc ->
-        v = Map.get(acc, k)
-
-        if is_bitstring(v) do
-          Map.put(
-            acc,
-            k,
-            v
-            |> collapse_spaces()
-            |> String.trim(",")
-          )
-        else
-          acc
-        end
-      end
-    )
-  end
-
-  def nonempty_string?(s) do
+  defp nonempty_string?(s) do
     is_bitstring(s) and s != ""
   end
 
-  def number_or_its_string(v, type) when is_bitstring(v) and type in [:integer, :float] do
+  defp number_or_its_string(v, type) when is_bitstring(v) and type in [:integer, :float] do
     with {_vi, ri} <- Integer.parse(v) do
       cond do
         type == :integer and ri == "" -> true
@@ -434,7 +450,7 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def number_or_its_string(v, type) when is_number(v) and type in [:integer, :float] do
+  defp number_or_its_string(v, type) when is_number(v) and type in [:integer, :float] do
     is_this_type = apply(Kernel, to_guard(type), [v])
 
     case {is_integer(v), is_float(v)} do
@@ -444,42 +460,34 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  # def number_or_its_string(v, type) when is_bitstring(v) and type in [:integer, :float] do
-  #   {vv, rem} = apply(to_module(type), :parse, [v]) |> IO.inspect()
-  #   {v?, vvv} = number_or_its_string(vv, type) |> IO.inspect()
-  #   {v? and rem == "", vvv} |> IO.inspect()
+  # not used
+  # defp to_module(atom) when is_atom(atom) do
+  #   [Elixir, atom |> to_string |> Macro.camelize()]
+  #   |> Module.safe_concat()
   # end
 
-  # def number_or_its_string(v, type) when is_number(v) and type in [:integer, :float] do
-
-  #   #{apply(Kernel, to_guard(type), [v]), v}
-  # end
-
-  # def number_or_its_string(_, _), do: false
-
-  def to_module(atom) when is_atom(atom) do
-    [Elixir, atom |> to_string |> Macro.camelize()]
-    |> Module.safe_concat()
-  end
-
-  def to_guard(atom) when is_atom(atom) do
+  defp to_guard(atom) when is_atom(atom) do
     ["is_", atom |> to_string]
     |> List.to_string()
     |> String.to_atom()
   end
 
-  def collapse_spaces(s) when is_bitstring(s) do
+  defp collapse_spaces(s) when is_bitstring(s) do
     s
     |> String.split(" ")
     |> Enum.reject(&(&1 == ""))
     |> List.to_string()
   end
 
-  def limits(:lat), do: [mn: -90.0, mx: 90.0, crit: :gtelte, type: :float]
-  def limits(:lon), do: [mn: -180.0, mx: 180.0, crit: :gtelt, type: :float]
-  def limits(:polygon_threshold), do: [mn: -1000.0, mx: 1000.0, crit: :gtlt, type: :float]
+  defp limits(:lat), do: [mn: -90.0, mx: 90.0, crit: :gtelte, type: :float]
+  defp limits(:lon), do: [mn: -180.0, mx: 180.0, crit: :gtelt, type: :float]
+  defp limits(:polygon_threshold), do: [mn: -1000.0, mx: 1000.0, crit: :gtlt, type: :float]
 
-  def explain(k) when is_atom(k) do
+  defp explain(k) when is_atom(k) do
+    Map.get(field_explanations(), k)
+  end
+
+  defp field_explanations do
     zero_or_one = ", 0 or 1"
 
     opt_sq = " (optional for structured query)"
@@ -541,18 +549,24 @@ defmodule ExNominatim.Validations do
       format:
         "One of: xml, json, jsonv2, geojson, geocodejson, text (Default: jsonv2 for /search, xml for /reverse, text only for /status)"
     }
-    |> Map.get(k)
   end
 
-  def polygon_output_message(format) when is_bitstring(format) do
+  def explain_fields(s) when is_struct(s) do
+    Map.take(
+      field_explanations(),
+      permitted_keys(s)
+    )
+  end
+
+  defp polygon_output_message(format) when is_bitstring(format) do
     "Polygon output in " <> format <> ", 0 or 1" <> default(0)
   end
 
-  def default(v) when is_bitstring(v) do
+  defp default(v) when is_bitstring(v) do
     " (Default: " <> v <> ")"
   end
 
-  def default(v) when is_number(v), do: default(to_string(v))
+  defp default(v) when is_number(v), do: default(to_string(v))
 
-  def default, do: default("unset")
+  defp default, do: default("unset")
 end

@@ -1,4 +1,12 @@
+# SPDX-FileCopyrightText: 2024 Isaak Tsalicoglou <isaak@overbring.com>
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule ExNominatim.Client.DetailsParams do
+  @moduledoc """
+  The struct for a request to the `/details` API endpoint.
+  """
+  @moduledoc since: "1.0.0"
+
   defstruct [
     :osmtype,
     :osmid,
@@ -19,5 +27,8 @@ defmodule ExNominatim.Client.DetailsParams do
 
   @required []
 
-  def new(p), do: ExNominatim.Client.new(p, @required, __MODULE__)
+  @doc """
+  Construct a new `%DetailsParams{}` struct from the content of the keyword list `opts`.
+  """
+  def new(opts), do: ExNominatim.Client.new(opts, @required, __MODULE__)
 end

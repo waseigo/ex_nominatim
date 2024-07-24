@@ -4,7 +4,7 @@ defmodule Nominatim.MixProject do
   def project do
     [
       app: :ex_nominatim,
-      version: "0.1.0",
+      version: "1.0.0",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       description: description(),
@@ -14,11 +14,11 @@ defmodule Nominatim.MixProject do
       # Docs
       name: "ExNominatim",
       source_url: "https://github.com/waseigo/ex_nominatim",
-      homepage_url: "https://overbring.com/software/ex_nominatim/",
+      homepage_url: "https://overbring.com/software/ex_nominatim",
       docs: [
         main: "ExNominatim",
-        logo: "./assets/ex_nominatim_logo.png",
-        assets: "etc/assets",
+        logo: "./etc/assets/ex_nominatim_logo.png",
+        assets: %{"etc/assets" => "etc/assets"},
         extras: ["README.md"]
       ]
     ]
@@ -26,7 +26,7 @@ defmodule Nominatim.MixProject do
 
   defp description do
     """
-    An Elixir library for accessing the REST API of OpenStreetMap Nominatim.
+    A full-featured client for the OpenStreetMap Nominatim API V1 (public and self-hosted), with extensive request validation, robust error-handling and reporting, and user guidance with helpful validation messages.
     """
   end
 
@@ -52,8 +52,6 @@ defmodule Nominatim.MixProject do
       {:req, "~> 0.5.4"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.31.0", only: :dev, runtime: false}
-      # {:dep_from_hexpm, "~> 0.3.0"},
-      # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
     ]
   end
 end

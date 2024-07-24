@@ -1,4 +1,12 @@
+# SPDX-FileCopyrightText: 2024 Isaak Tsalicoglou <isaak@overbring.com>
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule ExNominatim.Client.ReverseParams do
+  @moduledoc """
+  The struct for a request to the `/reverse` API endpoint.
+  """
+  @moduledoc since: "1.0.0"
+
   defstruct [
     :lat,
     :lon,
@@ -22,5 +30,8 @@ defmodule ExNominatim.Client.ReverseParams do
 
   @required [:lat, :lon]
 
-  def new(p), do: ExNominatim.Client.new(p, @required, __MODULE__)
+  @doc """
+  Construct a new `%ReverseParams{}` struct from the content of the keyword list `opts`, while taking into account the required fields (`:lat` and `:lon`) for a request to the `/reverse` API endpoint.
+  """
+  def new(opts), do: ExNominatim.Client.new(opts, @required, __MODULE__)
 end

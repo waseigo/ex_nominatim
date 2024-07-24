@@ -1,5 +1,23 @@
+# SPDX-FileCopyrightText: 2024 Isaak Tsalicoglou <isaak@overbring.com>
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule ExNominatim.HTTP do
   @endpoints [:search, :reverse, :lookup, :status, :details]
+
+  @moduledoc """
+  Functions that prepare an HTTP request, including validating the base URL of the target Nominatim API server setting the User-Agent header automatically, and selecting all the non-nil request parameters.
+  """
+  @moduledoc since: "1.0.0"
+
+  @doc """
+  Prepares an HTTP request to the `endpoint` at `base_url` with the `params` map containing request parameters.
+
+  * `endpoint` is one of `:search`, `:reverse`, `:lookup`, `:status`, `:details`.
+  * `params` is a map (not a keyword list!) with the request parameters.
+  * `base_url` is the the base URL of the target Nominatim API server.
+
+  You can use this function directly if you want to bypass the more user-friendly delegate functions in the main ExNominatim module and define the `params` map directly. This function does not perform any validation of the validity of the keys in `params` for the selected endpoint, or of their respective values vs. the API endpoint's specification.
+  """
 
   def prepare(endpoint, params, base_url)
       when endpoint in @endpoints and is_map(params) and params != %{} and is_bitstring(base_url) do
@@ -70,11 +88,11 @@ defmodule ExNominatim.HTTP do
 
   defp endpoint_url(endpoint) when is_atom(endpoint), do: to_string(endpoint)
 
-  def keep_query_params(m) when is_struct(m) do
+  defp keep_query_params(m) when is_struct(m) do
     m |> Map.from_struct() |> keep_query_params()
   end
 
-  def keep_query_params(m) when is_map(m) do
+  defp keep_query_params(m) when is_map(m) do
     Map.filter(m, fn {k, v} -> not (is_nil(v) or k in [:errors, :valid?]) end)
   end
 end

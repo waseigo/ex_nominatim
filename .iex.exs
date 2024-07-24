@@ -1,1 +1,0 @@
-alias ExNominatim.{Client, HTTP}
