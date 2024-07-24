@@ -18,7 +18,7 @@ defmodule Nominatim.MixProject do
       docs: [
         main: "ExNominatim",
         logo: "./etc/assets/ex_nominatim_logo.png",
-        assets: %{"etc/assets" => "etc/assets"},
+        assets: "etc/assets",
         extras: ["README.md"]
       ]
     ]

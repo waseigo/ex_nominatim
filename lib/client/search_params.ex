@@ -43,7 +43,7 @@ defmodule ExNominatim.Client.SearchParams do
   @required []
 
   @doc """
-  Construct a new `%SearchParams{}` struct from the content of the keyword list `opts`, while taking into account that a request to the `/reverse` API endpoint requires either a free-form query with the keyword `:q` assigned a value _or_ a structured query with values defined for at least one of `:amenity`, `:street`, `:city`, `:county`, :state`, `:country` and `:postalcode`, but not both.
+  Construct a new `%SearchParams{}` struct from the content of the keyword list `opts`, while taking into account that a request to the `/reverse` API endpoint requires either a free-form query with the keyword `:q` assigned a value _or_ a structured query with values defined for at least one of `:amenity`, `:street`, `:city`, `:county`, `:state`, `:country` and `:postalcode`, but not both.
   """
 
   def new(opts), do: ExNominatim.Client.new(opts, @required, __MODULE__)

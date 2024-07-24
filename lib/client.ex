@@ -3,7 +3,7 @@
 
 defmodule ExNominatim.Client do
   alias ExNominatim.{HTTP, Validations}
-  @default_base_url "http://localhost:8080"
+  @default_base_url "https://nominatim.openstreetmap.org"
   @implemented_endpoints [:search, :reverse, :status, :lookup, :details]
 
   @moduledoc """

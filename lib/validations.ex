@@ -32,12 +32,12 @@ defmodule ExNominatim.Validations do
   @osm_detail_fields [:osmtype, :osmid]
 
   @doc """
-  Validates the content and intent of a request represented by a request parameters struct `m` (one of `SearchParams`, `ReverseParams`, etc.).
+  Validates the content and intent of a request represented by a request parameters struct `params` (`%SearchParams{}`, `%ReverseParams{}`, etc.).
 
   You can use this function directly if you want to combine it with `ExNominatim.HTTP.prepare/3`.
   """
-  def validate(m) when is_struct(m) do
-    with %{valid?: true} = validated <- validate_all_fields(m),
+  def validate(params) when is_struct(params) do
+    with %{valid?: true} = validated <- validate_all_fields(params),
          %{valid?: true} = verified <- verify_intent(validated) do
       {:ok, sanitize_comma_separated_strings(verified)}
     else
@@ -46,14 +46,14 @@ defmodule ExNominatim.Validations do
   end
 
   @doc """
-  Sanitizes the values of those fields that (according to the Nominatim API spec) contain a comma-separated list of strings. It collapses all spaces and trims and leading and trailing commas.
+  Sanitizes the values of those fields of the `params` request params struct (`%SearchParams{}`, `%ReverseParams{}`, etc.) that contain a comma-separated list of strings according to the Nominatim API specification. It collapses all spaces and trims and leading and trailing commas.
 
   You can use this function directly if you want to combine it with `ExNominatim.Validations.validate/1`.
   """
-  def sanitize_comma_separated_strings(query) when is_struct(query) do
+  def sanitize_comma_separated_strings(params) when is_struct(params) do
     [:layer, :countrycodes, :exclude_place_ids, :viewbox, :osm_ids]
     |> Enum.reduce(
-      query,
+      params,
       fn k, acc ->
         v = Map.get(acc, k)
 
@@ -551,10 +551,13 @@ defmodule ExNominatim.Validations do
     }
   end
 
-  def explain_fields(s) when is_struct(s) do
+  @doc """
+  Given a request params struct (`%ReverseParams{}`, `%SearchParams{}`, etc.) explain its fields, their default values (if any) and their values' limits (if applicable).
+  """
+  def explain_fields(params) when is_struct(params) do
     Map.take(
       field_explanations(),
-      permitted_keys(s)
+      permitted_keys(params)
     )
   end
 
