@@ -1,11 +1,12 @@
 defmodule ExNominatim.Client do
   alias ExNominatim.{HTTP, Validations}
   @default_base_url "http://localhost:8080"
-  @implemented_endpoints [:search, :reverse, :status, :lookup]
+  @implemented_endpoints [:search, :reverse, :status, :lookup, :details]
 
   def search(params), do: generic(:search, params)
   def reverse(params), do: generic(:reverse, params)
   def lookup(params), do: generic(:lookup, params)
+  def details(params), do: generic(:details, params)
   def status(params \\ [format: "text"]), do: generic(:status, params)
 
   defp generic(action, params) when is_list(params) and action in @implemented_endpoints do
@@ -18,6 +19,25 @@ defmodule ExNominatim.Client do
       {:keyword?, false} -> {:error, :improper_list}
       {:new, {:error, reason}} -> {:error, reason}
     end
+  end
+
+  def make_new_struct(params, action) do
+    provided = Keyword.keys(params)
+    module = get_module(action)
+
+    {:ok, blank_struct} = apply(module, :new, [[]])
+
+    extraneous = provided -- permitted_keys(blank_struct)
+
+    if extraneous != [] do
+      {:error, {:extraneous_fields, extraneous}}
+    else
+      apply(module, :new, [params])
+    end
+  end
+
+  defp permitted_keys(m) when is_struct(m) do
+    m |> Map.from_struct() |> Map.keys() |> Kernel.--([:valid?, :errors])
   end
 
   defp generic_request(action, params_struct, opts)

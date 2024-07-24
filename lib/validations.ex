@@ -1,6 +1,11 @@
 defmodule ExNominatim.Validations do
-  alias ExNominatim.Client.LookupParams
-  alias ExNominatim.Client.{SearchParams, ReverseParams, StatusParams}
+  alias ExNominatim.Client.{
+    SearchParams,
+    ReverseParams,
+    StatusParams,
+    DetailsParams,
+    LookupParams
+  }
 
   # Source: https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Officially_assigned_code_elements
   @iso_3166_1_alpha2 String.split(
@@ -16,12 +21,42 @@ defmodule ExNominatim.Validations do
 
   @structured_query_fields [:amenity, :street, :city, :county, :state, :country, :postalcode]
 
+  @osm_detail_fields [:osmtype, :osmid]
+
   def validate(m) when is_struct(m) do
     with %{valid?: true} = validated <- validate_all_fields(m),
          %{valid?: true} = verified <- verify_intent(validated) do
       {:ok, sanitize_comma_separated_strings(verified)}
     else
       %{valid?: false} = mi -> {:error, mi}
+    end
+  end
+
+  def verify_intent_bifurcated_helper(m, single_field_a, multiple_fields_b, scope_b, message)
+      when is_struct(m) and is_atom(single_field_a) and is_list(multiple_fields_b) and
+             is_bitstring(message) do
+    option_a = not is_nil(Map.get(m, single_field_a))
+
+    option_b =
+      m
+      |> extract_values(multiple_fields_b)
+      |> Enum.filter(&(!is_nil(&1)))
+      |> all_some_or_none(multiple_fields_b)
+      |> Kernel.in(scope_b)
+
+    case {option_a, option_b} do
+      {true, false} -> m
+      {false, true} -> m
+      {false, false} -> invalidate(m, :missing_query_params, message)
+      {true, true} -> invalidate(m, :confusing_intent, message)
+    end
+  end
+
+  def all_some_or_none(fields, reference) do
+    cond do
+      fields == [] -> :none
+      valid_number_value_ranged?(length(fields), :gtelt, mn: 1, mx: length(reference)) -> :some
+      length(fields) == length(reference) -> :all
     end
   end
 
@@ -33,22 +68,23 @@ defmodule ExNominatim.Validations do
   def verify_intent(%StatusParams{} = m), do: m
 
   def verify_intent(%SearchParams{} = m) do
-    is_freeform = not is_nil(m.q)
+    verify_intent_bifurcated_helper(
+      m,
+      :q,
+      @structured_query_fields,
+      [:some, :all],
+      "Must query either using freeform or structured query parameters"
+    )
+  end
 
-    is_structured =
-      extract_structured_field_values(m)
-      |> Enum.filter(&(!is_nil(&1)))
-      |> List.to_string()
-      |> Kernel.!=("")
-
-    message = "Must set either freeform or structured query parameters (and not both)"
-
-    case {is_freeform, is_structured} do
-      {true, false} -> m
-      {false, true} -> m
-      {false, false} -> invalidate(m, :missing_query_params, message)
-      {true, true} -> invalidate(m, :confusing_intent, message)
-    end
+  def verify_intent(%DetailsParams{} = m) do
+    verify_intent_bifurcated_helper(
+      m,
+      :place_id,
+      @osm_detail_fields,
+      [:all],
+      "Must query either by osmtype, osmid and (optionally) class, or only by place_id"
+    )
   end
 
   def verify_intent(%ReverseParams{} = m) do
@@ -64,7 +100,6 @@ defmodule ExNominatim.Validations do
           true -> false
         end
       end)
-      |> cumulative_and()
 
     case coords_ok? do
       [true, true] ->
@@ -86,8 +121,8 @@ defmodule ExNominatim.Validations do
     %{m | valid?: false, errors: [{err_key, err_msg} | m.errors]}
   end
 
-  def extract_structured_field_values(p) when is_map(p) do
-    Map.take(p, @structured_query_fields) |> Map.values()
+  def extract_values(p, fields) when is_map(p) and is_list(fields) do
+    Map.take(p, fields) |> Map.values()
   end
 
   def validate_all_fields(m) when is_struct(m) do
@@ -115,42 +150,30 @@ defmodule ExNominatim.Validations do
 
   def valid?(v, _) when is_nil(v), do: {true, nil}
 
-  def valid?(v, coord) when coord in [:lat, :lon] do
-    message = explain(coord)
+  def valid?(v, k) when k in [:lat, :lon, :polygon_threshold] do
+    lim = limits(k)
 
-    lim = limits(coord)
+    {
+      number_or_its_string(v, :float) and valid_number_value_ranged?(v, lim[:crit], lim),
+      explain(k)
+    }
+  end
 
-    cond do
-      is_float(v) and valid_number_value_ranged?(v, lim[:crit], limits(coord)) ->
-        {true, message}
+  def valid?(v, :osmtype = k) do
+    message = explain(k)
 
-      nonempty_string?(v) ->
-        case Float.parse(v) do
-          :error -> {false, message}
-          {vf, _} -> valid?(vf, coord)
-        end
-
-      true ->
-        {false, message}
+    if is_bitstring(v) do
+      {
+        v in ["N", "W", "R"],
+        message
+      }
+    else
+      {false, message}
     end
   end
 
-  def valid?(v, :polygon_threshold = k) do
-    message = explain(k)
-
-    cond do
-      is_float(v) ->
-        {true, message}
-
-      nonempty_string?(v) ->
-        case Float.parse(v) do
-          :error -> {false, message}
-          {vf, _} -> valid?(vf, k)
-        end
-
-      true ->
-        {false, message}
-    end
+  def valid?(v, :osmid = k) do
+    {number_or_its_string(v, :integer), explain(k)}
   end
 
   def valid?(v, bitstring_field)
@@ -179,6 +202,11 @@ defmodule ExNominatim.Validations do
              :extratags,
              :namedetails,
              :bounded,
+             :pretty,
+             :keywords,
+             :linkedplaces,
+             :hierarchy,
+             :group_hierarchy,
              :polygon_geojson,
              :polygon_kml,
              :polygon_svg,
@@ -342,13 +370,12 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  def permitted_keys(m) when is_struct(m) do
+  defp permitted_keys(m) when is_struct(m) do
     m |> Map.from_struct() |> Map.keys() |> Kernel.--([:valid?, :errors])
   end
 
   def comma_separated_strings_to_list(v) when is_bitstring(v) do
     v
-    # |> String.downcase()
     |> String.split(",")
     |> Enum.map(&String.trim/1)
   end
@@ -395,6 +422,52 @@ defmodule ExNominatim.Validations do
     is_bitstring(s) and s != ""
   end
 
+  def number_or_its_string(v, type) when is_bitstring(v) and type in [:integer, :float] do
+    with {_vi, ri} <- Integer.parse(v) do
+      cond do
+        type == :integer and ri == "" -> true
+        type == :float and ri != "" -> true
+        true -> false
+      end
+    else
+      :error -> false
+    end
+  end
+
+  def number_or_its_string(v, type) when is_number(v) and type in [:integer, :float] do
+    is_this_type = apply(Kernel, to_guard(type), [v])
+
+    case {is_integer(v), is_float(v)} do
+      {true, false} -> true and is_this_type
+      {false, true} -> true and is_this_type
+      {false, false} -> false
+    end
+  end
+
+  # def number_or_its_string(v, type) when is_bitstring(v) and type in [:integer, :float] do
+  #   {vv, rem} = apply(to_module(type), :parse, [v]) |> IO.inspect()
+  #   {v?, vvv} = number_or_its_string(vv, type) |> IO.inspect()
+  #   {v? and rem == "", vvv} |> IO.inspect()
+  # end
+
+  # def number_or_its_string(v, type) when is_number(v) and type in [:integer, :float] do
+
+  #   #{apply(Kernel, to_guard(type), [v]), v}
+  # end
+
+  # def number_or_its_string(_, _), do: false
+
+  def to_module(atom) when is_atom(atom) do
+    [Elixir, atom |> to_string |> Macro.camelize()]
+    |> Module.safe_concat()
+  end
+
+  def to_guard(atom) when is_atom(atom) do
+    ["is_", atom |> to_string]
+    |> List.to_string()
+    |> String.to_atom()
+  end
+
   def collapse_spaces(s) when is_bitstring(s) do
     s
     |> String.split(" ")
@@ -402,8 +475,9 @@ defmodule ExNominatim.Validations do
     |> List.to_string()
   end
 
-  def limits(:lat), do: [mn: -90.0, mx: 90.0, crit: :gtelte]
-  def limits(:lon), do: [mn: -180.0, mx: 180.0, crit: :gtelt]
+  def limits(:lat), do: [mn: -90.0, mx: 90.0, crit: :gtelte, type: :float]
+  def limits(:lon), do: [mn: -180.0, mx: 180.0, crit: :gtelt, type: :float]
+  def limits(:polygon_threshold), do: [mn: -1000.0, mx: 1000.0, crit: :gtlt, type: :float]
 
   def explain(k) when is_atom(k) do
     zero_or_one = ", 0 or 1"
@@ -435,6 +509,12 @@ defmodule ExNominatim.Validations do
           default() <> " (no restriction)",
       featureType: "One of: country, state, city, settlement" <> default(),
       exclude_place_ids: "Comma-separated list of place_id items to skip" <> default(),
+      pretty: "Add indentation to the output to make it more human-readable" <> default(0),
+      keywords:
+        "Include a list of name keywords and address keywords in the result" <> default(0),
+      linkedplaces: "Include details of places that are linked with this one" <> default(1),
+      hierarchy: "Include details of places lower in the address hierarchy" <> default(0),
+      group_hierarchy: "Group output of the address hierarchy by type" <> default(0),
       viewbox:
         "Boost parameter which focuses the search on the given area. <x1>,<y1>,<x2>,<y2> where x is longitude and y is latitude" <>
           default(),
@@ -452,6 +532,10 @@ defmodule ExNominatim.Validations do
       lat: "Floating-point number in range [-90, 90] (or its string representation)",
       lon: "Floating-point number in range [-180, 180) (or its string representation)",
       zoom: "Level of detail required for the address [3, 5, 8, 10, 12..18]" <> default(18),
+      osmtype: "Type of OSM object, one of N (node), W (way), or R (relation)",
+      osmid: "OSM ID of the object, integer",
+      class:
+        "Optional OSM tag to distinguish between entries, when the corresponding OSM object has more than one main tag",
       osm_ids:
         "Comma-separated list of up to 50 OSM ids each prefixed with its type, one of node(N), way(W) or relation(R).",
       format:
