@@ -4,7 +4,7 @@ defmodule Nominatim.MixProject do
   def project do
     [
       app: :ex_nominatim,
-      version: "1.0.0",
+      version: "1.1.0",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       description: description(),
@@ -16,7 +16,7 @@ defmodule Nominatim.MixProject do
       source_url: "https://github.com/waseigo/ex_nominatim",
       homepage_url: "https://overbring.com/software/ex_nominatim",
       docs: [
-        main: "ExNominatim",
+        main: "readme",
         logo: "./etc/assets/ex_nominatim_logo.png",
         assets: "etc/assets",
         extras: ["README.md"]
