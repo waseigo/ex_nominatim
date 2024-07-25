@@ -28,8 +28,8 @@ defmodule ExNominatim.Validations do
                   )
 
   @structured_query_fields [:amenity, :street, :city, :county, :state, :country, :postalcode]
-
   @osm_detail_fields [:osmtype, :osmid]
+  @endpoints [:search, :reverse, :status, :lookup, :details]
 
   @doc """
   Validates the content and intent of a request represented by a request parameters struct `params` (`%SearchParams{}`, `%ReverseParams{}`, etc.).
@@ -43,6 +43,36 @@ defmodule ExNominatim.Validations do
     else
       %{valid?: false} = mi -> {:error, mi}
     end
+  end
+
+  defp validate_format_parameter(params) when is_struct(params) do
+    k = :format
+    d = ~w|xml json jsonv2 geojson geocodejson|
+
+    valid_formats =
+      case get_action(params) do
+        :search -> d
+        :reverse -> d
+        :lookup -> d
+        :details -> ~w|json|
+        :status -> ~w|text json|
+        _ -> []
+      end
+
+    if is_nil(params.format) or params.format in valid_formats,
+      do: params,
+      else: invalidate(params, k, explain(k))
+  end
+
+  defp get_action(params) when is_struct(params) do
+    params
+    |> Map.get(:__struct__)
+    |> Module.split()
+    |> List.last()
+    |> Macro.underscore()
+    |> String.split("_")
+    |> hd()
+    |> String.to_atom()
   end
 
   @doc """
@@ -166,7 +196,7 @@ defmodule ExNominatim.Validations do
   end
 
   defp validate_all_fields(m) when is_struct(m) do
-    permitted_keys(m)
+    (permitted_keys(m) -- [:format])
     |> Enum.reduce(
       %{m | valid?: true, errors: []},
       fn k, acc ->
@@ -176,6 +206,7 @@ defmodule ExNominatim.Validations do
         end
       end
     )
+    |> validate_format_parameter()
   end
 
   defp validate_field(k, m) when is_atom(k) and is_map(m) do
@@ -326,10 +357,31 @@ defmodule ExNominatim.Validations do
 
   defp valid?(v, :email = k) do
     message = explain(k)
+    regex = ~r/^[A-Za-z0-9._%+\-+']+@[A-Za-z0-9.-]+\.[A-Za-z]+$/
 
     if is_bitstring(v) do
       {
-        Regex.match?(~r/^[A-Za-z0-9._%+\-+']+@[A-Za-z0-9.-]+\.[A-Za-z]+$/, v),
+        Regex.match?(regex, v),
+        message
+      }
+    else
+      {false, message}
+    end
+  end
+
+  defp valid?(v, :viewbox = k) do
+    message = explain(k)
+    # regex = ~r/\d*\.\d*/
+
+    if is_bitstring(v) do
+      {
+        comma_separated_strings_to_list(v)
+        |> Enum.with_index()
+        |> Enum.map(fn {coord, idx} ->
+          ctype = (Integer.mod(idx, 2) == 0 && :lon) || :lat
+          valid?(coord, ctype) |> elem(0)
+        end)
+        |> cumulative_and(),
         message
       }
     else
@@ -364,6 +416,10 @@ defmodule ExNominatim.Validations do
   defp valid_integer_value_discrete?(v, valid_values) when is_bitstring(v) do
     {vi, _} = Integer.parse(v)
     valid_integer_value_discrete?(vi, valid_values)
+  end
+
+  defp valid_integer_value_discrete?(v, [0, 1]) when is_boolean(v) do
+    true
   end
 
   defp valid_number_value_ranged?(v, crit, opts)
@@ -460,11 +516,14 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  # not used
-  # defp to_module(atom) when is_atom(atom) do
-  #   [Elixir, atom |> to_string |> Macro.camelize()]
-  #   |> Module.safe_concat()
-  # end
+  defp action_to_struct(action) when action in @endpoints do
+    [
+      "ExNominatim.Client",
+      action |> to_string |> Kernel.<>("_params") |> Macro.camelize() |> String.to_atom()
+    ]
+    |> Module.safe_concat()
+    |> struct()
+  end
 
   defp to_guard(atom) when is_atom(atom) do
     ["is_", atom |> to_string]
@@ -483,13 +542,14 @@ defmodule ExNominatim.Validations do
   defp limits(:lon), do: [mn: -180.0, mx: 180.0, crit: :gtelt, type: :float]
   defp limits(:polygon_threshold), do: [mn: -1000.0, mx: 1000.0, crit: :gtlt, type: :float]
 
-  defp explain(k) when is_atom(k) do
-    Map.get(field_explanations(), k)
+  defp explain(k) when is_atom(k) and k not in @endpoints do
+    Map.get(explain_fields(), k)
   end
 
-  defp field_explanations do
-    zero_or_one = ", 0 or 1"
-
+  @doc """
+  Show all fields and their explanations.
+  """
+  def explain_fields do
     opt_sq = " (optional for structured query)"
 
     %{
@@ -502,12 +562,11 @@ defmodule ExNominatim.Validations do
       country: "Country" <> opt_sq,
       postalcode: "Postal code" <> opt_sq,
       limit: "Limit the maximum number of returned results. Integer, 1 to 40" <> default(10),
-      addressdetails:
-        "Include a breakdown of the address into elements" <> zero_or_one <> default(0),
+      addressdetails: "Include a breakdown of the address into elements" <> default(0, :bool),
       extratags:
         "Include any additional information in the result that is available in the database" <>
-          zero_or_one <> default(0),
-      namedetails: "Include a full list of names for the result" <> zero_or_one <> default(0),
+          default(0, :bool),
+      namedetails: "Include a full list of names for the result" <> default(0, :bool),
       accept_language:
         "Browser language string consisting of ISO 639-1 Set 1 codes" <>
           default("content of Accept-Language HTTP header"),
@@ -517,16 +576,17 @@ defmodule ExNominatim.Validations do
           default() <> " (no restriction)",
       featureType: "One of: country, state, city, settlement" <> default(),
       exclude_place_ids: "Comma-separated list of place_id items to skip" <> default(),
-      pretty: "Add indentation to the output to make it more human-readable" <> default(0),
+      pretty: "Add indentation to the output to make it more human-readable" <> default(0, :bool),
       keywords:
-        "Include a list of name keywords and address keywords in the result" <> default(0),
-      linkedplaces: "Include details of places that are linked with this one" <> default(1),
-      hierarchy: "Include details of places lower in the address hierarchy" <> default(0),
-      group_hierarchy: "Group output of the address hierarchy by type" <> default(0),
+        "Include a list of name keywords and address keywords in the result" <> default(0, :bool),
+      linkedplaces:
+        "Include details of places that are linked with this one" <> default(1, :bool),
+      hierarchy: "Include details of places lower in the address hierarchy" <> default(0, :bool),
+      group_hierarchy: "Group output of the address hierarchy by type" <> default(0, :bool),
       viewbox:
         "Boost parameter which focuses the search on the given area. <x1>,<y1>,<x2>,<y2> where x is longitude and y is latitude" <>
           default(),
-      bounded: "Exclude any results outside the viewbox" <> zero_or_one <> default(0),
+      bounded: "Exclude any results outside the viewbox" <> zero_or_one() <> default(0),
       polygon_geojson: polygon_output_message("GeoJSON"),
       polygon_kml: polygon_output_message("KML"),
       polygon_svg: polygon_output_message("SVG"),
@@ -535,8 +595,8 @@ defmodule ExNominatim.Validations do
         "Tolerance in degrees with which the simplified geometry may differ from the original geometry, floating-point number" <>
           default(0.0),
       email: "Valid email address (if making a large number of requests)" <> default(),
-      dedupe: "Toggle the deduplication mechanism" <> zero_or_one <> default(1),
-      debug: "Output assorted developer debug information in HTML" <> zero_or_one <> default(0),
+      dedupe: "Toggle the deduplication mechanism" <> default(1, :bool),
+      debug: "Output assorted developer debug information in HTML" <> default(0, :bool),
       lat: "Floating-point number in range [-90, 90] (or its string representation)",
       lon: "Floating-point number in range [-180, 180) (or its string representation)",
       zoom: "Level of detail required for the address [3, 5, 8, 10, 12..18]" <> default(18),
@@ -552,18 +612,28 @@ defmodule ExNominatim.Validations do
   end
 
   @doc """
-  Given a request params struct (`%ReverseParams{}`, `%SearchParams{}`, etc.) explain its fields, their default values (if any) and their values' limits (if applicable).
+  Given a request params struct (`%ReverseParams{}`, `%SearchParams{}`, etc.), a keyword list, or a list of atoms corresponding to keys, explain the fields, their default values (if any) and their values' limits (if applicable). It ignores any keyword list keys or atoms in the list that do not correspond to request parameters. If provided with the atom of a field, it returns the validation/explanation message for that field
   """
-  def explain_fields(params) when is_struct(params) do
-    Map.take(
-      field_explanations(),
-      permitted_keys(params)
-    )
+  def explain_fields(x)
+      when is_struct(x) or is_list(x) or (is_atom(x) and x in @endpoints) do
+    cond do
+      is_struct(x) -> permitted_keys(x)
+      is_list(x) and Keyword.keyword?(x) -> Keyword.keys(x)
+      is_list(x) -> x
+      is_atom(x) -> x |> action_to_struct() |> permitted_keys()
+    end
+    |> then(&Map.take(explain_fields(), &1))
+  end
+
+  def explain_fields(x) when is_atom(x) and x not in @endpoints do
+    explain(x)
   end
 
   defp polygon_output_message(format) when is_bitstring(format) do
-    "Polygon output in " <> format <> ", 0 or 1" <> default(0)
+    "Polygon output in " <> format <> zero_or_one() <> default(0)
   end
+
+  defp default, do: default("unset")
 
   defp default(v) when is_bitstring(v) do
     " (Default: " <> v <> ")"
@@ -571,5 +641,13 @@ defmodule ExNominatim.Validations do
 
   defp default(v) when is_number(v), do: default(to_string(v))
 
-  defp default, do: default("unset")
+  defp default(v, :bool) when v == 0 or v == 1 do
+    zero_or_one() <> default(to_string(v) <> " or " <> int_to_bool(v))
+  end
+
+  defp int_to_bool(v) when v == 0 or v == 1 do
+    to_string((v == 1 && true) || false)
+  end
+
+  defp zero_or_one, do: ", 0 or 1 (or boolean false/true)"
 end
