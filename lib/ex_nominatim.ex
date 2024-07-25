@@ -4,9 +4,9 @@
 defmodule ExNominatim do
   alias ExNominatim.{Client, Validations}
 
-  # @nominatim_public_api "https://nominatim.openstreetmap.org"
+  @nominatim_public_api "https://nominatim.openstreetmap.org"
   # for testing purposes during development
-  @nominatim_public_api "http://localhost:8080"
+  #@nominatim_public_api "http://localhost:8080"
 
   # If the following line is uncommented, it will point to a self-hosted Nominatim API server when ExNominatim or an overarching app that uses it is in the :dev or :test environment.
   # @nominatim_public_api (Mix.env() in [:dev, :test]) && "http://localhost:8080" || "https://nominatim.openstreetmap.org"
@@ -22,7 +22,7 @@ defmodule ExNominatim do
   >
   > Please respect the [Nominatim Usage Policy](https://operations.osmfoundation.org/policies/nominatim/) when using the public server. To prevent useless requests, it is recommended to not disable request validation.
 
-  **New since v1.0.1:** ExNominatim now takes into account your overarching Elixir application's configuration, as defined using the `Config` module. For example, in the `config/config.exs` file of a Phoenix app called `MyApp`, you can define default values like so:
+  **New since v1.1.0:** ExNominatim now takes into account your overarching Elixir application's configuration, as defined using the `Config` module. For example, in the `config/config.exs` file of a Phoenix app called `MyApp`, you can define default values like so:
 
   ```elixir
   config :my_app, MyApp.ExNominatim,
@@ -58,10 +58,10 @@ defmodule ExNominatim do
 
   At any moment you can use `ExNominatim.get_config/0` to see the current configuration.
 
-  Two things are overriden by default by ExNominatim's default settings (unless overriden through your own configuration or explicitly-set request parameter values):
+  The following things are set as default in ExNominatim's default settings (unless overriden through your own configuration or explicitly-set request parameter values):
   1. The `:format` value for the `/reverse` endpoint, which is switched to GeocodeJSON, instead of XML (the API endpoint's default).
-  2. The `:format` valud for the `/status` endpoint, which is switch to JSON, instead of text (the API endpoint's default).
-
+  2. The `:format` value for the `/lookup` endpoint, which is switched to JSONv2, instead of XML (the API endpoint's default).
+  3. The `:format` value for the `/status` endpoint, which is switch to JSON, instead of text (the API endpoint's default).
   """
   @moduledoc since: "1.0.0"
 
