@@ -23,7 +23,7 @@ defmodule ExNominatim.Client.ReverseParams do
     :polygon_threshold,
     :email,
     :debug,
-    format: "jsonv2",
+    :format,
     valid?: nil,
     errors: []
   ]

@@ -20,7 +20,7 @@ defmodule ExNominatim.Client.LookupParams do
     :polygon_threshold,
     :email,
     :debug,
-    format: "jsonv2",
+    :format,
     valid?: nil,
     errors: []
   ]

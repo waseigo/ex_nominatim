@@ -35,7 +35,7 @@ defmodule ExNominatim.Client.SearchParams do
     :email,
     :dedupe,
     :debug,
-    format: "jsonv2",
+    :format,
     valid?: nil,
     errors: []
   ]

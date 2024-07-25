@@ -7,9 +7,7 @@ defmodule ExNominatim.Client.StatusParams do
   """
   @moduledoc since: "1.0.0"
 
-  defstruct format: "text",
-            valid?: nil,
-            errors: []
+  defstruct [:format, valid?: nil, errors: []]
 
   @required []
 

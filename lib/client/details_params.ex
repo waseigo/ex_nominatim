@@ -20,7 +20,7 @@ defmodule ExNominatim.Client.DetailsParams do
     :group_hierarchy,
     :polygon_geojson,
     :accept_language,
-    format: "json",
+    :format,
     valid?: nil,
     errors: []
   ]
