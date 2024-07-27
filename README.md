@@ -6,19 +6,19 @@
 
 ## Goals
 
-* Prevent unnecessary calls to the Nominatim API server by validating intended requests and preventing them if the request parameters are invalid.
-* Solid error-handling for robustness in production.
-* Provide helpful validation messages to the user when a request is deemed invalid.
+- Prevent unnecessary calls to the Nominatim API server by validating intended requests and preventing them if the request parameters are invalid.
+- Solid error-handling for robustness in production.
+- Provide helpful validation messages to the user when a request is deemed invalid.
 
 ## Features
 
-* Covers the `/search`, `/reverse`, `/lookup`, `/status` and `/details` endpoints.
-* Utilizes request parameter structs with the appropriate fields (except for `json_callback`) for each endpoint.
-* Configurable for your application with overridable defaults using Elixir's `Config` module to set any default values, including the `:base_url` option for use with self-hosted Nominatim API instances.
-* Validates parameter values prior to the request (possible to override this with the `force: true` option).
-* Provides helpful return tuples `{:ok, ...}`, `{:error, reason}` and `{:error, {specific_error, other_info}}` across the board.
-* Collects all detected field validation errors in an `:errors` field, and provides a `:valid?` field in each request params struct.
-* Automatically sets the `User-Agent` header to "ExNominatim/{version}" to comply with the [Nominatim Usage Policy](https://operations.osmfoundation.org/policies/nominatim/).
+- Covers the `/search`, `/reverse`, `/lookup`, `/status` and `/details` endpoints.
+- Utilizes request parameter structs with the appropriate fields (except for `json_callback`) for each endpoint.
+- Configurable for your application with overridable defaults using Elixir's `Config` module to set any default values, including the `:base_url` option for use with self-hosted Nominatim API instances.
+- Validates parameter values prior to the request (possible to override this with the `force: true` option).
+- Provides helpful return tuples `{:ok, ...}`, `{:error, reason}` and `{:error, {specific_error, other_info}}` across the board.
+- Collects all detected field validation errors in an `:errors` field, and provides a `:valid?` field in each request params struct.
+- Automatically sets the `User-Agent` header to "ExNominatim/{version}" to comply with the [Nominatim Usage Policy](https://operations.osmfoundation.org/policies/nominatim/).
 
 ## Installation
 
@@ -27,7 +27,7 @@ The package can be installed [from Hex](https://hex.pm/package/ex_nominatim) by 
 ```elixir
 def deps do
   [
-    {:ex_nominatim, "~> 1.1.1"}
+    {:ex_nominatim, "~> 1.1.2"}
   ]
 end
 ```
@@ -66,19 +66,19 @@ config :my_app, MyApp.ExNominatim,
 
 The configuration above has the following effects:
 
-* Requests to all endpoints will use the self-hosted Nominatim API instance at port 8080 of `localhost`, accessible over HTTP.
-* Request parameter validation errors (`valid?: false` in the request parameters struct) will be ignored for requests to all endpoints, except for requests to the `/search` endpoint.
-* Unless requested otherwise in `opts`, requests to the `/search` endpoint will return data in GeocodeJSON format (instead of the default `jsonv2`).
-* Requests to the `/reverse` endpoint will set `:namedetails` to 1 (unless otherwise set in `opts`).
-* Requests to the `/status` endpoint will return JSON instead of the [default text](https://nominatim.org/release-docs/develop/api/Status/#output) (HTTP status code 200 and text `OK` or HTTP status 500 and a detailed error mesage).
-* The responses from all endpoints will be processed automatically using `ExNominatim.Report.process/1`, and any maps and contents thereof (or map contents of structs's keys) will be converted from bitstring keys to atom keys using `ExNominatim.Report.atomize/1`.
+- Requests to all endpoints will use the self-hosted Nominatim API instance at port 8080 of `localhost`, accessible over HTTP.
+- Request parameter validation errors (`valid?: false` in the request parameters struct) will be ignored for requests to all endpoints, except for requests to the `/search` endpoint.
+- Unless requested otherwise in `opts`, requests to the `/search` endpoint will return data in GeocodeJSON format (instead of the default `jsonv2`).
+- Requests to the `/reverse` endpoint will set `:namedetails` to 1 (unless otherwise set in `opts`).
+- Requests to the `/status` endpoint will return JSON instead of the [default text](https://nominatim.org/release-docs/develop/api/Status/#output) (HTTP status code 200 and text `OK` or HTTP status 500 and a detailed error mesage).
+- The responses from all endpoints will be processed automatically using `ExNominatim.Report.process/1`, and any maps and contents thereof (or map contents of structs's keys) will be converted from bitstring keys to atom keys using `ExNominatim.Report.atomize/1`.
 
 Refer to [the documentation of the main `ExNominatim` module](https://hexdocs.pm/ex_nominatim/ExNominatim.html) for more information.
 
 ## Ideas and someday/maybe features
 
-* Build [Cachex](https://hexdocs.pm/cachex/Cachex.html) in (see [Reactive Warming](https://hexdocs.pm/cachex/reactive-warming.html)) and provide the option to automatically throttle requests to the public API to the "absolute maximum of 1 request per second" as requested by the [Nominatim Usage Policy](https://operations.osmfoundation.org/policies/nominatim/).
-* Implement a test suite.
+- Build [Cachex](https://hexdocs.pm/cachex/Cachex.html) in (see [Reactive Warming](https://hexdocs.pm/cachex/reactive-warming.html)) and provide the option to automatically throttle requests to the public API to the "absolute maximum of 1 request per second" as requested by the [Nominatim Usage Policy](https://operations.osmfoundation.org/policies/nominatim/).
+- Implement a test suite.
 
 ## Who made this?
 

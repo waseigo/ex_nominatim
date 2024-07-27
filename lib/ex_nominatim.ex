@@ -6,7 +6,7 @@ defmodule ExNominatim do
 
   @nominatim_public_api "https://nominatim.openstreetmap.org"
   # for testing purposes during development
-  #@nominatim_public_api "http://localhost:8080"
+  # @nominatim_public_api "http://localhost:8080"
 
   # If the following line is uncommented, it will point to a self-hosted Nominatim API server when ExNominatim or an overarching app that uses it is in the :dev or :test environment.
   # @nominatim_public_api (Mix.env() in [:dev, :test]) && "http://localhost:8080" || "https://nominatim.openstreetmap.org"
