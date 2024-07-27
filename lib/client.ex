@@ -6,6 +6,7 @@ defmodule ExNominatim.Client do
 
   @config ExNominatim.get_config()
   @config_specific_keys [:base_url, :force, :process, :atomize]
+  @validation_keys [:errors, :valid?]
   @endpoints [:search, :reverse, :status, :lookup, :details]
 
   @moduledoc """
@@ -87,7 +88,7 @@ defmodule ExNominatim.Client do
   end
 
   defp permitted_keys(m) when is_struct(m) do
-    m |> Map.from_struct() |> Map.keys() |> Kernel.--([:valid?, :errors])
+    m |> Map.from_struct() |> Map.keys() |> Kernel.--(@validation_keys)
   end
 
   defp generic_request(action, params_struct, config_opts)
@@ -251,6 +252,8 @@ defmodule ExNominatim.Client do
   end
 
   defp keep_query_params(m) when is_map(m) do
-    Map.filter(m, fn {k, v} -> not (is_nil(v) or k in [:errors, :valid?]) end)
+    Map.filter(m, fn {k, v} ->
+      not (is_nil(v) or k in (@validation_keys ++ @config_specific_keys))
+    end)
   end
 end
