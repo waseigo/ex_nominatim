@@ -69,9 +69,12 @@ defmodule ExNominatim.Client do
     if extraneous != [] do
       {:error, {:extraneous_fields, extraneous}}
     else
+      app_config = ExNominatim.get_config()
+
       opts_new =
         @config[:all]
-        |> Keyword.merge(@config[action])
+        |> Keyword.merge(app_config[action])
+        |> Keyword.merge(app_config[:all])
         |> Keyword.merge(opts)
 
       config_opts = Keyword.take(opts_new, @config_specific_keys)
@@ -82,7 +85,6 @@ defmodule ExNominatim.Client do
 
         {:error, v} ->
           {:error, v}
-          # {:error, {:apply_failed, opts_new}}
       end
     end
   end
@@ -125,7 +127,8 @@ defmodule ExNominatim.Client do
           output
       end
     else
-      {:error, reason} -> {:error, reason}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
