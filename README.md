@@ -27,7 +27,7 @@ The package can be installed [from Hex](https://hex.pm/package/ex_nominatim) by 
 ```elixir
 def deps do
   [
-    {:ex_nominatim, "~> 1.1.3"}
+    {:ex_nominatim, "~> 1.1"}
   ]
 end
 ```
