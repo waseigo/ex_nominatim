@@ -27,7 +27,7 @@ The package can be installed [from Hex](https://hex.pm/package/ex_nominatim) by 
 ```elixir
 def deps do
   [
-    {:ex_nominatim, "~> 1.1.3"}
+    {:ex_nominatim, "~> 2.0"}
   ]
 end
 ```
@@ -46,22 +46,22 @@ By calling the endpoint functions of the `ExNominatim` module you will be hittin
 
 ## Optional configuration and default parameters
 
-In the more likely scenario where you use ExNominatim in your own application (e.g., in a Phoenix application) called `MyApp`, you can override all defaults across all endpoints and then even for each endpoint through your application's configuration, e.g. in the `config/config.exs` file of a Phoenix app. For example:
+In the more likely scenario where you use ExNominatim in your own application (e.g., in a Phoenix application), you can override all defaults across all endpoints and then even for each endpoint through your application's configuration, e.g. in the `config/config.exs` file of a Phoenix app. For example:
 
 ```elixir
-config :my_app, MyApp.ExNominatim,
-  all: [
-    base_url: "http://localhost:8080",
-    force: true,
-    format: "json",
-    process: true,
-    atomize: true
-  ],
-  search: [format: "geocodejson", force: false],
-  reverse: [namedetails: 1],
-  lookup: [],
-  details: [],
-  status: [format: "json"]
+  config :ex_nominatim, ExNominatim,
+    all: [
+      base_url: "http://localhost:8080",
+      force: true,
+      format: "json",
+      process: true,
+      atomize: true
+    ],
+    search: [format: "geocodejson", force: false],
+    reverse: [namedetails: 1],
+    lookup: [],
+    details: [],
+    status: [format: "json"]
 ```
 
 The configuration above has the following effects:
