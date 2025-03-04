@@ -22,22 +22,22 @@ defmodule ExNominatim do
   >
   > Please respect the [Nominatim Usage Policy](https://operations.osmfoundation.org/policies/nominatim/) when using the public server. To prevent useless requests, it is recommended to not disable request validation.
 
-  **New since v1.1.0:** ExNominatim now takes into account your overarching Elixir application's configuration, as defined using the `Config` module. For example, in the `config/config.exs` file of a Phoenix app called `MyApp`, you can define default values like so:
+    **New since v2.0.0:** ExNominatim can be configured as defined using the `Config` module. You can define default values like so:
 
   ```elixir
-  config :my_app, MyApp.ExNominatim,
-  all: [
-    base_url: "http://localhost:8080",
-    force: true,
-    format: "json",
-    process: true,
-    atomize: true
-  ],
-  search: [format: "geocodejson", force: false],
-  reverse: [namedetails: 1],
-  lookup: [],
-  details: [],
-  status: [format: "json"]
+  config :ex_nominatim, ExNominatim,
+    all: [
+      base_url: "http://localhost:8080",
+      force: true,
+      format: "json",
+      process: true,
+      atomize: true
+    ],
+    search: [format: "geocodejson", force: false],
+    reverse: [namedetails: 1],
+    lookup: [],
+    details: [],
+    status: [format: "json"]
   ```
 
   The configuration above has the following effects:
@@ -133,37 +133,13 @@ defmodule ExNominatim do
   Show the current configuration defaults.
   """
   def get_config() do
-    case Application.fetch_env(app_name(), config_key()) do
+    case Application.fetch_env(:ex_nominatim, ExNominatim) do
       {:ok, config} ->
         Keyword.merge(default_config(), config)
 
       :error ->
         default_config()
     end
-  end
-
-  defp own_name do
-    __MODULE__
-    |> Module.split()
-    |> hd()
-  end
-
-  defp app_name do
-    Mix.Project.config()
-    |> Keyword.get(:app)
-  end
-
-  defp config_key do
-    case [
-      app_name()
-      |> to_string()
-      |> Macro.camelize(),
-      own_name()
-    ] do
-      [own, own] -> [own]
-      [app, own] -> [app, own]
-    end
-    |> Module.safe_concat()
   end
 
   defp default_config do
