@@ -22,7 +22,7 @@
 
 ## Installation
 
-The package can be installed [from Hex](https://hex.pm/package/ex_nominatim) by adding `ex_nominatim` to your list of dependencies in `mix.exs`:
+The package can be installed [from Hex](https://hex.pm/packages/ex_nominatim) by adding `ex_nominatim` to your list of dependencies in `mix.exs`:
 
 ```elixir
 def deps do
