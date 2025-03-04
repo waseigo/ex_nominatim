@@ -35,7 +35,10 @@ defmodule Nominatim.MixProject do
       files: ["lib", "mix.exs", "README*", "LICENSE*"],
       maintainers: ["Isaak Tsalicoglou"],
       licenses: ["Apache-2.0"],
-      links: %{"GitHub" => "https://github.com/waseigo/ex_nominatim"}
+      links: %{
+        "GitHub" => "https://github.com/waseigo/ex_nominatim",
+        "Sponsor" => "https://ko-fi.com/overbring_labs"
+      }
     ]
   end
 
