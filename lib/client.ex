@@ -101,13 +101,15 @@ defmodule ExNominatim.Client do
     base_url = Keyword.get(config_opts, :base_url)
     process? = Keyword.get(config_opts, :process)
     atomize? = Keyword.get(config_opts, :atomize)
+    cache? = Keyword.get(config_opts, :req_cache)
 
     # skip validation if force: true in config_opts
     maybe_validated =
       if force?, do: {:ok, params_struct}, else: Validations.validate(params_struct)
 
     with {:ok, %^s{} = maybe_valid_params} <- maybe_validated,
-         {:ok, %Req.Request{} = req} <- prepare(action, maybe_valid_params, base_url),
+         {:ok, %Req.Request{} = req} <-
+           prepare(action, maybe_valid_params, base_url, cache: cache?),
          {:ok, %Req.Response{} = resp} <- Req.request(req) do
       output = {:ok, resp}
 
@@ -177,13 +179,16 @@ defmodule ExNominatim.Client do
   * `endpoint` is one of `:search`, `:reverse`, `:lookup`, `:status`, `:details`.
   * `params` is a map (not a keyword list!) with the request parameters.
   * `base_url` is the the base URL of the target Nominatim API server.
+  * `req_opts` additional options passed to `Req.new` function
 
   You can use this function directly if you want to bypass the more user-friendly delegate functions in the main ExNominatim module and define the `params` map directly. This function does not perform any validation of the validity of the keys in `params` for the selected endpoint, or of their respective values vs. the API endpoint's specification.
   """
 
-  def prepare(endpoint, params, base_url)
+  def prepare(endpoint, params, base_url), do: prepare(endpoint, params, base_url, [])
+
+  def prepare(endpoint, params, base_url, req_opts)
       when endpoint in @endpoints and is_map(params) and params != %{} and is_bitstring(base_url) do
-    with {:ok, %Req.Request{} = req} <- base(base_url) do
+    with {:ok, %Req.Request{} = req} <- base(base_url, req_opts) do
       params = keep_query_params(params)
 
       {:ok,
@@ -195,19 +200,20 @@ defmodule ExNominatim.Client do
     end
   end
 
-  def prepare(endpoint, _, _) when not is_atom(endpoint) and endpoint not in @endpoints do
+  def prepare(endpoint, _, _, _req_opts)
+      when not is_atom(endpoint) and endpoint not in @endpoints do
     {:error, :invalid_endpoint}
   end
 
-  def prepare(_, params, _) when params == %{} do
+  def prepare(_, params, _, _req_opts) when params == %{} do
     {:error, :empty_params}
   end
 
-  def prepare(_, params, _) when not is_map(params) do
+  def prepare(_, params, _, _req_opts) when not is_map(params) do
     {:error, :invalid_params}
   end
 
-  defp base(url) do
+  defp base(url, req_opts) do
     with {:ok, url} <- validate_url(url) do
       {:ok,
        Req.new(
@@ -216,7 +222,7 @@ defmodule ExNominatim.Client do
          headers: %{
            user_agent: user_agent()
          },
-         cache: true
+         cache: Keyword.get(req_opts, :req_cache, true)
        )}
     else
       {:error, reason} -> {:error, reason}

@@ -55,7 +55,8 @@ config :my_app, MyApp.ExNominatim,
     force: true,
     format: "json",
     process: true,
-    atomize: true
+    atomize: true,
+    req_cache: true
   ],
   search: [format: "geocodejson", force: false],
   reverse: [namedetails: 1],
