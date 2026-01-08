@@ -36,8 +36,7 @@ defmodule Nominatim.MixProject do
       maintainers: ["Isaak Tsalicoglou"],
       licenses: ["Apache-2.0"],
       links: %{
-        "GitHub" => "https://github.com/waseigo/ex_nominatim",
-        "Sponsor" => "https://ko-fi.com/overbring_labs"
+        "GitHub" => "https://github.com/waseigo/ex_nominatim"
       }
     ]
   end
