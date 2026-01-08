@@ -4,7 +4,7 @@ defmodule Nominatim.MixProject do
   def project do
     [
       app: :ex_nominatim,
-      version: "1.1.3",
+      version: "2.0.0",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       description: description(),
@@ -35,7 +35,9 @@ defmodule Nominatim.MixProject do
       files: ["lib", "mix.exs", "README*", "LICENSE*"],
       maintainers: ["Isaak Tsalicoglou"],
       licenses: ["Apache-2.0"],
-      links: %{"GitHub" => "https://github.com/waseigo/ex_nominatim"}
+      links: %{
+        "GitHub" => "https://github.com/waseigo/ex_nominatim"
+      }
     ]
   end
 
@@ -49,7 +51,7 @@ defmodule Nominatim.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:req, "~> 0.5.4"},
+      {:req, "~> 0.5"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.31.0", only: :dev, runtime: false}
     ]

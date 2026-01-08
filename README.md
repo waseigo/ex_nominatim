@@ -2,6 +2,9 @@
 
 # ExNominatim
 
+[![Hex pm](https://img.shields.io/hexpm/v/ex_nominatim.svg?style=flat)](https://hex.pm/packages/ex_nominatim)
+[![Hexdocs.pm](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/ex_nominatim/)
+
 **ExNominatim** is a full-featured client for the [OpenStreetMap](https://www.openstreetmap.org) [Nominatim API V1](https://nominatim.org/release-docs/latest/api/Overview/), with extensive request validation, robust error-handling and reporting, and user guidance with helpful validation messages.
 
 ## Goals
@@ -22,12 +25,12 @@
 
 ## Installation
 
-The package can be installed [from Hex](https://hex.pm/package/ex_nominatim) by adding `ex_nominatim` to your list of dependencies in `mix.exs`:
+The package can be installed [from Hex](https://hex.pm/packages/ex_nominatim) by adding `ex_nominatim` to your list of dependencies in `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:ex_nominatim, "~> 1.1.3"}
+    {:ex_nominatim, "~> 2.0"}
   ]
 end
 ```
@@ -46,7 +49,7 @@ By calling the endpoint functions of the `ExNominatim` module you will be hittin
 
 ## Optional configuration and default parameters
 
-In the more likely scenario where you use ExNominatim in your own application (e.g., in a Phoenix application) called `MyApp`, you can override all defaults across all endpoints and then even for each endpoint through your application's configuration, e.g. in the `config/config.exs` file of a Phoenix app. For example:
+In the more likely scenario where you use ExNominatim in your own application (e.g., in a Phoenix application), you can override all defaults across all endpoints and then even for each endpoint through your application's configuration, e.g. in the `config/config.exs` file of a Phoenix app. For example:
 
 ```elixir
 config :my_app, MyApp.ExNominatim,
