@@ -30,7 +30,7 @@ The package can be installed [from Hex](https://hex.pm/packages/ex_nominatim) by
 ```elixir
 def deps do
   [
-    {:ex_nominatim, "~> 2.0"}
+    {:ex_nominatim, "~> 2.1"}
   ]
 end
 ```
@@ -85,6 +85,6 @@ Refer to [the documentation of the main `ExNominatim` module](https://hexdocs.pm
 
 ## Who made this?
 
-Copyright 2024, made by [Isaak Tsalicoglou](https://linkedin.com/in/tisaak), [OVERBRING](https://overbring.com) in [Athens](https://www.openstreetmap.org/#map=11/37.9909/23.7387), [Attica](https://www.openstreetmap.org/#map=8/37.061/23.456), [Greece](https://www.openstreetmap.org/#map=6/38.310/24.489).
+Copyright 2024, made by [Isaak Tsalicoglou](https://linkedin.com/in/tisaak), Managing Director of [OVERBRING Labs](https://overbring.com) in [Athens](https://www.openstreetmap.org/#map=11/37.9909/23.7387), [Attica](https://www.openstreetmap.org/#map=8/37.061/23.456), [Greece](https://www.openstreetmap.org/#map=6/38.310/24.489).
 
 Many thanks to all the volunteers and contributors of [OpenStreetMap](https://www.openstreetmap.org/) and [Nominatim](https://nominatim.org/).
