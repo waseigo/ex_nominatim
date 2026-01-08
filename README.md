@@ -2,6 +2,9 @@
 
 # ExNominatim
 
+[![Hex pm](https://img.shields.io/hexpm/v/ex_nominatim.svg?style=flat)](https://hex.pm/packages/ex_nominatim)
+[![Hexdocs.pm](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/ex_nominatim/)
+
 **ExNominatim** is a full-featured client for the [OpenStreetMap](https://www.openstreetmap.org) [Nominatim API V1](https://nominatim.org/release-docs/latest/api/Overview/), with extensive request validation, robust error-handling and reporting, and user guidance with helpful validation messages.
 
 ## Goals
@@ -85,9 +88,3 @@ Refer to [the documentation of the main `ExNominatim` module](https://hexdocs.pm
 Copyright 2024, made by [Isaak Tsalicoglou](https://linkedin.com/in/tisaak), [OVERBRING](https://overbring.com) in [Athens](https://www.openstreetmap.org/#map=11/37.9909/23.7387), [Attica](https://www.openstreetmap.org/#map=8/37.061/23.456), [Greece](https://www.openstreetmap.org/#map=6/38.310/24.489).
 
 Many thanks to all the volunteers and contributors of [OpenStreetMap](https://www.openstreetmap.org/) and [Nominatim](https://nominatim.org/).
-
-## Donate
-
-Has this library been useful for your project? 
-
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/V7V119L07A)
