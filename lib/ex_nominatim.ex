@@ -47,7 +47,7 @@ defmodule ExNominatim do
   * Unless requested otherwise in `opts`, requests to the `/search` endpoint will return data in GeocodeJSON format (instead of the default `jsonv2`).
   * Requests to the `/reverse` endpoint will set `:namedetails` to 1 (unless otherwise set in `opts`).
   * Requests to the `/status` endpoint will return JSON instead of the [default text](https://nominatim.org/release-docs/develop/api/Status/#output) (HTTP status code 200 and text `OK` or HTTP status 500 and a detailed error mesage).
-  * The responses from all endpoints will be processed automatically using `ExNominatim.Report.process/1`, and any maps and contents thereof (or map contents of structs's keys) will be converted from bitstring keys to atom keys using `ExNominatim.Report.atomize/1`.
+  * The responses from all endpoints will be processed automatically using `ExNominatim.Report.process/1`, and any maps and contents thereof (or map contents of structs's keys) will be converted from binary keys to atom keys using `ExNominatim.Report.atomize/1`.
 
   Here's the preference order:
 

@@ -87,7 +87,7 @@ defmodule ExNominatim.Validations do
       fn k, acc ->
         v = Map.get(acc, k)
 
-        if is_bitstring(v) do
+        if is_binary(v) do
           Map.put(
             acc,
             k,
@@ -104,7 +104,7 @@ defmodule ExNominatim.Validations do
 
   defp verify_intent_bifurcated_helper(m, single_field_a, multiple_fields_b, scope_b, message)
        when is_struct(m) and is_atom(single_field_a) and is_list(multiple_fields_b) and
-              is_bitstring(message) do
+              is_binary(message) do
     option_a = not is_nil(Map.get(m, single_field_a))
 
     option_b =
@@ -132,7 +132,7 @@ defmodule ExNominatim.Validations do
 
   defp verify_intent(%LookupParams{} = m) do
     osm_ids = Map.get(m, :osm_ids)
-    if is_bitstring(osm_ids), do: m, else: invalidate(m, :missing_query_params, explain(:osm_ids))
+    if is_binary(osm_ids), do: m, else: invalidate(m, :missing_query_params, explain(:osm_ids))
   end
 
   defp verify_intent(%StatusParams{} = m), do: m
@@ -187,7 +187,7 @@ defmodule ExNominatim.Validations do
   end
 
   defp invalidate(m, err_key, err_msg)
-       when is_struct(m) and is_atom(err_key) and is_bitstring(err_msg) do
+       when is_struct(m) and is_atom(err_key) and is_binary(err_msg) do
     %{m | valid?: false, errors: [{err_key, err_msg} | m.errors]}
   end
 
@@ -233,7 +233,7 @@ defmodule ExNominatim.Validations do
   defp valid?(v, :osmtype = k) do
     message = explain(k)
 
-    if is_bitstring(v) do
+    if is_binary(v) do
       {
         v in ["N", "W", "R"],
         message
@@ -292,7 +292,7 @@ defmodule ExNominatim.Validations do
   defp valid?(v, :osm_ids = k) do
     message = explain(k)
 
-    with true <- is_bitstring(v),
+    with true <- is_binary(v),
          true <- validate_osm_ids(v) do
       {true, message}
     else
@@ -328,7 +328,7 @@ defmodule ExNominatim.Validations do
   defp valid?(v, :countrycodes = k) do
     message = explain(k)
 
-    if is_bitstring(v) do
+    if is_binary(v) do
       {
         comma_separated_strings_to_list(v)
         |> Enum.map(&Kernel.in(&1, @iso_3166_1_alpha2))
@@ -359,7 +359,7 @@ defmodule ExNominatim.Validations do
     message = explain(k)
     regex = ~r/^[A-Za-z0-9._%+\-+']+@[A-Za-z0-9.-]+\.[A-Za-z]+$/
 
-    if is_bitstring(v) do
+    if is_binary(v) do
       {
         Regex.match?(regex, v),
         message
@@ -373,7 +373,7 @@ defmodule ExNominatim.Validations do
     message = explain(k)
     # regex = ~r/\d*\.\d*/
 
-    if is_bitstring(v) do
+    if is_binary(v) do
       {
         comma_separated_strings_to_list(v)
         |> Enum.with_index()
@@ -392,7 +392,7 @@ defmodule ExNominatim.Validations do
   defp valid?(v, :accept_language = k) do
     message = explain(k)
 
-    if is_bitstring(v) do
+    if is_binary(v) do
       {
         comma_separated_strings_to_list(v)
         |> Enum.map(&Kernel.in(&1, @iso_639_1_set1))
@@ -413,7 +413,7 @@ defmodule ExNominatim.Validations do
     v in valid_values
   end
 
-  defp valid_integer_value_discrete?(v, valid_values) when is_bitstring(v) do
+  defp valid_integer_value_discrete?(v, valid_values) when is_binary(v) do
     {vi, _} = Integer.parse(v)
     valid_integer_value_discrete?(vi, valid_values)
   end
@@ -450,7 +450,7 @@ defmodule ExNominatim.Validations do
     end
   end
 
-  defp valid_number_value_ranged?(v, crit, opts) when is_bitstring(v) do
+  defp valid_number_value_ranged?(v, crit, opts) when is_binary(v) do
     vt =
       case Keyword.get(opts, :type) do
         :integer -> Integer.parse(v)
@@ -468,20 +468,20 @@ defmodule ExNominatim.Validations do
     m |> Map.from_struct() |> Map.keys() |> Kernel.--([:valid?, :errors])
   end
 
-  defp comma_separated_strings_to_list(v) when is_bitstring(v) do
+  defp comma_separated_strings_to_list(v) when is_binary(v) do
     v
     |> String.split(",")
     |> Enum.map(&String.trim/1)
   end
 
-  defp validate_osm_ids(osm_ids) when is_bitstring(osm_ids) do
+  defp validate_osm_ids(osm_ids) when is_binary(osm_ids) do
     osm_ids
     |> comma_separated_strings_to_list()
     |> Enum.map(&validate_osm_id_single/1)
     |> cumulative_and()
   end
 
-  defp validate_osm_id_single(osm_id) when is_bitstring(osm_id) do
+  defp validate_osm_id_single(osm_id) when is_binary(osm_id) do
     r = ~r/^[NWR]\d+$/
     Regex.match?(r, osm_id)
   end
@@ -491,10 +491,10 @@ defmodule ExNominatim.Validations do
   end
 
   defp nonempty_string?(s) do
-    is_bitstring(s) and s != ""
+    is_binary(s) and s != ""
   end
 
-  defp number_or_its_string(v, type) when is_bitstring(v) and type in [:integer, :float] do
+  defp number_or_its_string(v, type) when is_binary(v) and type in [:integer, :float] do
     with {_vi, ri} <- Integer.parse(v) do
       cond do
         type == :integer and ri == "" -> true
@@ -519,19 +519,19 @@ defmodule ExNominatim.Validations do
   defp action_to_struct(action) when action in @endpoints do
     [
       "ExNominatim.Client",
-      action |> to_string |> Kernel.<>("_params") |> Macro.camelize() |> String.to_atom()
+      action |> to_string() |> Kernel.<>("_params") |> Macro.camelize() |> String.to_atom()
     ]
     |> Module.safe_concat()
     |> struct()
   end
 
   defp to_guard(atom) when is_atom(atom) do
-    ["is_", atom |> to_string]
+    ["is_", atom |> to_string()]
     |> List.to_string()
     |> String.to_atom()
   end
 
-  defp collapse_spaces(s) when is_bitstring(s) do
+  defp collapse_spaces(s) when is_binary(s) do
     s
     |> String.split(" ")
     |> Enum.reject(&(&1 == ""))
@@ -629,13 +629,13 @@ defmodule ExNominatim.Validations do
     explain(x)
   end
 
-  defp polygon_output_message(format) when is_bitstring(format) do
+  defp polygon_output_message(format) when is_binary(format) do
     "Polygon output in " <> format <> zero_or_one() <> default(0)
   end
 
   defp default, do: default("unset")
 
-  defp default(v) when is_bitstring(v) do
+  defp default(v) when is_binary(v) do
     " (Default: " <> v <> ")"
   end
 

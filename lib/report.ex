@@ -9,7 +9,7 @@ defmodule ExNominatim.Report do
   """
   def process({:ok, %Req.Response{body: body} = resp}) do
     p = {
-      (resp.status == 200 and not detect_error_in_body(body) && :ok) || :error,
+      ((resp.status == 200 and not detect_error_in_body(body)) && :ok) || :error,
       %{status: resp.status, body: resp.body}
     }
 
@@ -54,18 +54,18 @@ defmodule ExNominatim.Report do
     cond do
       is_list(body) -> false
       is_map(body) -> "error" in Map.keys(body)
-      is_bitstring(body) -> String.contains?(body, "<error>")
+      is_binary(body) -> String.contains?(body, "<error>")
     end
   end
 
   defp extract_error_from_body(body) do
     cond do
-      is_bitstring(body) -> extract_error_from_xml(body)
+      is_binary(body) -> extract_error_from_xml(body)
       is_map(body) -> Map.get(body, "error")
     end
   end
 
-  defp extract_error_from_xml(xml) when is_bitstring(xml) do
+  defp extract_error_from_xml(xml) when is_binary(xml) do
     r = ~r/<error>(.*)<\/error>/
 
     case Regex.run(r, xml) do
@@ -75,10 +75,10 @@ defmodule ExNominatim.Report do
   end
 
   defp flatten(%{"code" => _, "message" => message}), do: {:api, message}
-  defp flatten(message) when is_bitstring(message), do: {:api, message}
+  defp flatten(message) when is_binary(message), do: {:api, message}
 
   @doc """
-  Given a map, a list of maps, or a struct, convert all keys from bitstrings to atoms. Bitstring keys including dashes will have all their dashes replaced with underscores.
+  Given a map, a list of maps, or a struct, convert all keys from binaries to atoms. binary keys including dashes will have all their dashes replaced with underscores.
   """
   def atomize(nil), do: nil
 
@@ -101,7 +101,7 @@ defmodule ExNominatim.Report do
 
   def atomize(x) when not is_struct(x) and not is_map(x), do: x
 
-  def to_atom(s) when is_bitstring(s) do
+  def to_atom(s) when is_binary(s) do
     s
     |> String.replace("-", "_")
     |> String.to_atom()

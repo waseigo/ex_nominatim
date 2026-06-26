@@ -135,7 +135,7 @@ defmodule ExNominatim.Client do
   defp get_module(action) when action in @endpoints do
     [
       __MODULE__,
-      action |> to_string |> Kernel.<>("_params") |> Macro.camelize() |> String.to_atom()
+      action |> to_string() |> Kernel.<>("_params") |> Macro.camelize() |> String.to_atom()
     ]
     |> Module.safe_concat()
   end
@@ -182,7 +182,7 @@ defmodule ExNominatim.Client do
   """
 
   def prepare(endpoint, params, base_url)
-      when endpoint in @endpoints and is_map(params) and params != %{} and is_bitstring(base_url) do
+      when endpoint in @endpoints and is_map(params) and params != %{} and is_binary(base_url) do
     with {:ok, %Req.Request{} = req} <- base(base_url) do
       params = keep_query_params(params)
 
@@ -244,7 +244,7 @@ defmodule ExNominatim.Client do
       %URI{scheme: nil} -> {:error, :missing_scheme}
       %URI{host: nil} -> {:error, :missing_host}
       %URI{host: ""} -> {:error, :missing_host}
-      %URI{host: host} when is_bitstring(host) -> {:ok, url}
+      %URI{host: host} when is_binary(host) -> {:ok, url}
     end
   end
 
