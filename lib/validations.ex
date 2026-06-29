@@ -260,11 +260,7 @@ defmodule ExNominatim.Validations do
             ] do
     message = explain(bitstring_field)
 
-    cond do
-      nonempty_string?(v) -> {true, message}
-      is_nil(v) -> {true, message}
-      true -> {false, message}
-    end
+    if nonempty_string?(v), do: {true, message}, else: {false, message}
   end
 
   defp valid?(v, zero_one_field)
