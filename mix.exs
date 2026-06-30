@@ -18,7 +18,7 @@ defmodule Nominatim.MixProject do
       docs: [
         main: "readme",
         logo: "./etc/assets/ex_nominatim_logo.png",
-        assets: "etc/assets",
+        assets: %{"etc/assets" => "assets"},
         extras: ["README.md"]
       ],
       test_coverage: [summary: [threshold: 80]]
