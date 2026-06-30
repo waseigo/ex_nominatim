@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Network-level retry with exponential backoff and jitter via `:retry` config option.
   Supports `false` (off), `true` (default 3 retries), or keyword `[max_retries: 3,
-  base_delay: 100, max_delay: 5000, jitter: true]`. Retries on transport errors,
+base_delay: 100, max_delay: 5000, jitter: true]`. Retries on transport errors,
   5xx, and 429 responses.
 - Circuit breaker (`ExNominatim.CircuitBreaker`) — ETS-backed, per-server breaker
   with `:closed` / `:open` / `:half_open` states. Configurable via `:circuit_breaker`
@@ -73,16 +73,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `:max_concurrency`, `:cache`, `:cache_errors`, `:cache_error_ttl`, `:rate_limit`,
   `:test_adapter` added to filter list.
 - Relaxed Req dependency to `~> 0.5`.
-
-### Fixed
-
-- ETS table race condition in `CircuitBreaker.init/0`, `RateLimiter.init/0`, and
-  `Concurrency.init/0` — concurrent table creation from ephemeral
-  `Task.async_stream` processes no longer crashes sibling tasks.
-- `Concurrency.release/1` — no longer raises `ArgumentError` when called for a
-  base_url that was never acquired (e.g., with `max_concurrency: :infinity`).
-- Test `:atomics.add/3` return value assumption — OTP 27+ changed add/3 to
-  return `:ok` instead of the old value; tests now use `:atomics.get/2` to read.
 
 ### Testing
 
