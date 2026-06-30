@@ -66,33 +66,33 @@ defmodule ExNominatim.ReportTest do
     test "returns error for 200 response with error key in body" do
       resp = %Req.Response{status: 200, body: %{"error" => "Something went wrong"}}
       assert {:error, result} = Report.process({:ok, resp})
+      assert result.code == :api_error
+      assert result.descr == "Something went wrong"
       assert result.status == 200
-      assert result.body == nil
-      assert {:api, "Something went wrong"} in result.errors
     end
 
     test "returns error for non-200 response with XML error body" do
       resp = %Req.Response{status: 500, body: "<error>Service unavailable</error>"}
       assert {:error, result} = Report.process({:ok, resp})
+      assert result.code == :api_error
+      assert result.descr == "Service unavailable"
       assert result.status == 500
-      assert result.body == nil
-      assert {:api, "Service unavailable"} in result.errors
     end
 
     test "returns error for non-200 response with map error body" do
       resp = %Req.Response{status: 404, body: %{"error" => "Not found", "code" => 404}}
       assert {:error, result} = Report.process({:ok, resp})
+      assert result.code == :api_error
+      assert result.descr == "Not found"
       assert result.status == 404
-      assert result.body == nil
-      assert {:api, "Not found"} in result.errors
     end
 
     test "extracts error from XML error response" do
       xml_body = "<error>Bad request</error>"
       resp = %Req.Response{status: 200, body: xml_body}
       assert {:error, result} = Report.process({:ok, resp})
-      assert result.body == nil
-      assert {:api, "Bad request"} in result.errors
+      assert result.code == :api_error
+      assert result.descr == "Bad request"
     end
 
     test "passes through error tuples with tuple payload" do
@@ -102,15 +102,15 @@ defmodule ExNominatim.ReportTest do
     test "handles error struct with errors field" do
       err_struct = %TestErrorStruct{errors: [validation: "failed"]}
       assert {:error, result} = Report.process({:error, err_struct})
+      assert result.code == :validation
       assert result.errors == [validation: "failed"]
-      assert result.body == nil
     end
 
     test "handles error map with body containing error" do
       err_map = %{body: %{"error" => "Not found"}, status: 404}
       assert {:error, result} = Report.process({:error, err_map})
-      assert result.status == 404
-      assert {:api, "Not found"} in result.errors
+      assert result.code == :api_error
+      assert result.descr == "Not found"
     end
 
     test "handles list body as success" do

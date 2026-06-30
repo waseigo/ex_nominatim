@@ -5,10 +5,10 @@ defmodule ExNominatim.ValidationsTest do
   use ExUnit.Case, async: true
 
   alias ExNominatim.Client.{
-    SearchParams,
-    ReverseParams,
-    LookupParams,
     DetailsParams,
+    LookupParams,
+    ReverseParams,
+    SearchParams,
     StatusParams
   }
 
@@ -27,15 +27,15 @@ defmodule ExNominatim.ValidationsTest do
 
     test "rejects both freeform and structured query (confusing intent)" do
       assert {:ok, params} = SearchParams.new(q: "Athens", city: "Athens")
-      assert {:error, %{valid?: false, errors: errors}} = Validations.validate(params)
-      assert length(errors) > 0
+      assert {:error, %{code: :validation, errors: errors}} = Validations.validate(params)
+      assert errors != []
       assert Enum.any?(errors, &match?({:confusing_intent, _}, &1))
     end
 
     test "rejects neither freeform nor structured query" do
       assert {:ok, params} = SearchParams.new(format: "json")
-      assert {:error, %{valid?: false, errors: errors}} = Validations.validate(params)
-      assert length(errors) > 0
+      assert {:error, %{code: :validation, errors: errors}} = Validations.validate(params)
+      assert errors != []
       assert Enum.any?(errors, &match?({:missing_query_params, _}, &1))
     end
 
@@ -46,7 +46,7 @@ defmodule ExNominatim.ValidationsTest do
 
     test "rejects invalid format for search" do
       assert {:ok, params} = SearchParams.new(q: "Athens", format: "txt")
-      assert {:error, %{valid?: false}} = Validations.validate(params)
+      assert       {:error, %{code: :validation}} = Validations.validate(params)
     end
 
     test "accepts all valid formats" do
@@ -58,10 +58,10 @@ defmodule ExNominatim.ValidationsTest do
 
     test "rejects limit out of range" do
       assert {:ok, params} = SearchParams.new(q: "Athens", limit: 0)
-      assert {:error, %{valid?: false}} = Validations.validate(params)
+      assert       {:error, %{code: :validation}} = Validations.validate(params)
 
       assert {:ok, params2} = SearchParams.new(q: "Athens", limit: 41)
-      assert {:error, %{valid?: false}} = Validations.validate(params2)
+      assert       {:error, %{code: :validation}} = Validations.validate(params2)
     end
 
     test "accepts limit at boundaries" do
@@ -74,7 +74,7 @@ defmodule ExNominatim.ValidationsTest do
 
     test "rejects invalid country codes" do
       assert {:ok, params} = SearchParams.new(q: "Athens", countrycodes: "XX,ZZ")
-      assert {:error, %{valid?: false}} = Validations.validate(params)
+      assert       {:error, %{code: :validation}} = Validations.validate(params)
     end
 
     test "accepts valid country codes" do
@@ -84,7 +84,7 @@ defmodule ExNominatim.ValidationsTest do
 
     test "rejects invalid language codes" do
       assert {:ok, params} = SearchParams.new(q: "Athens", accept_language: "xx,yy")
-      assert {:error, %{valid?: false}} = Validations.validate(params)
+      assert       {:error, %{code: :validation}} = Validations.validate(params)
     end
 
     test "accepts valid language codes" do
@@ -94,7 +94,7 @@ defmodule ExNominatim.ValidationsTest do
 
     test "rejects invalid layer values" do
       assert {:ok, params} = SearchParams.new(q: "Athens", layer: "invalid_layer")
-      assert {:error, %{valid?: false}} = Validations.validate(params)
+      assert       {:error, %{code: :validation}} = Validations.validate(params)
     end
 
     test "accepts valid layer values" do
@@ -104,7 +104,7 @@ defmodule ExNominatim.ValidationsTest do
 
     test "rejects invalid viewbox" do
       assert {:ok, params} = SearchParams.new(q: "Athens", viewbox: "1,2,3")
-      assert {:error, %{valid?: false}} = Validations.validate(params)
+      assert       {:error, %{code: :validation}} = Validations.validate(params)
     end
 
     test "accepts valid viewbox" do
@@ -114,7 +114,7 @@ defmodule ExNominatim.ValidationsTest do
 
     test "rejects invalid email" do
       assert {:ok, params} = SearchParams.new(q: "Athens", email: "not-an-email")
-      assert {:error, %{valid?: false}} = Validations.validate(params)
+      assert       {:error, %{code: :validation}} = Validations.validate(params)
     end
 
     test "accepts valid email" do
@@ -124,7 +124,7 @@ defmodule ExNominatim.ValidationsTest do
 
     test "rejects invalid featureType" do
       assert {:ok, params} = SearchParams.new(q: "Athens", featureType: "village")
-      assert {:error, %{valid?: false}} = Validations.validate(params)
+      assert       {:error, %{code: :validation}} = Validations.validate(params)
     end
 
     test "accepts valid featureType" do
@@ -134,7 +134,7 @@ defmodule ExNominatim.ValidationsTest do
 
     test "rejects invalid zoom" do
       assert {:ok, params} = SearchParams.new(q: "Athens", zoom: 4)
-      assert {:error, %{valid?: false}} = Validations.validate(params)
+      assert       {:error, %{code: :validation}} = Validations.validate(params)
     end
 
     test "accepts valid zoom values" do
@@ -146,7 +146,7 @@ defmodule ExNominatim.ValidationsTest do
 
     test "rejects zero_or_one fields with invalid values" do
       assert {:ok, params} = SearchParams.new(q: "Athens", addressdetails: 2)
-      assert {:error, %{valid?: false}} = Validations.validate(params)
+      assert       {:error, %{code: :validation}} = Validations.validate(params)
     end
 
     test "accepts zero_or_one fields with boolean values" do
@@ -174,38 +174,38 @@ defmodule ExNominatim.ValidationsTest do
     test "rejects missing lat" do
       assert {:ok, base} = ReverseParams.new(lat: 37.9838, lon: 23.7275)
       params = %{base | lat: nil}
-      assert {:error, %{valid?: false, errors: errors}} = Validations.validate(params)
+      assert {:error, %{code: :validation, errors: errors}} = Validations.validate(params)
       assert Enum.any?(errors, &match?({:missing_query_params, _}, &1))
     end
 
     test "rejects missing lon" do
       assert {:ok, base} = ReverseParams.new(lat: 37.9838, lon: 23.7275)
       params = %{base | lon: nil}
-      assert {:error, %{valid?: false, errors: errors}} = Validations.validate(params)
+      assert {:error, %{code: :validation, errors: errors}} = Validations.validate(params)
       assert Enum.any?(errors, &match?({:missing_query_params, _}, &1))
     end
 
     test "rejects both missing" do
       assert {:ok, base} = ReverseParams.new(lat: 37.9838, lon: 23.7275)
       params = %{base | lat: nil, lon: nil}
-      assert {:error, %{valid?: false, errors: errors}} = Validations.validate(params)
+      assert {:error, %{code: :validation, errors: errors}} = Validations.validate(params)
       assert Enum.any?(errors, &match?({:missing_query_params, _}, &1))
     end
 
     test "rejects lat out of range" do
       assert {:ok, params} = ReverseParams.new(lat: 91.0, lon: 23.7275)
-      assert {:error, %{valid?: false}} = Validations.validate(params)
+      assert       {:error, %{code: :validation}} = Validations.validate(params)
 
       assert {:ok, params2} = ReverseParams.new(lat: -91.0, lon: 23.7275)
-      assert {:error, %{valid?: false}} = Validations.validate(params2)
+      assert       {:error, %{code: :validation}} = Validations.validate(params2)
     end
 
     test "rejects lon out of range" do
       assert {:ok, params} = ReverseParams.new(lat: 37.9838, lon: 180.0)
-      assert {:error, %{valid?: false}} = Validations.validate(params)
+      assert       {:error, %{code: :validation}} = Validations.validate(params)
 
       assert {:ok, params2} = ReverseParams.new(lat: 37.9838, lon: -181.0)
-      assert {:error, %{valid?: false}} = Validations.validate(params2)
+      assert       {:error, %{code: :validation}} = Validations.validate(params2)
     end
 
     test "accepts boundary coordinates" do
@@ -218,7 +218,7 @@ defmodule ExNominatim.ValidationsTest do
 
     test "rejects invalid format for reverse" do
       assert {:ok, params} = ReverseParams.new(lat: 37.9838, lon: 23.7275, format: "html")
-      assert {:error, %{valid?: false}} = Validations.validate(params)
+      assert       {:error, %{code: :validation}} = Validations.validate(params)
     end
   end
 
@@ -236,61 +236,61 @@ defmodule ExNominatim.ValidationsTest do
     test "rejects missing osm_ids" do
       assert {:ok, base} = LookupParams.new(osm_ids: "N96954428")
       params = %{base | osm_ids: nil}
-      assert {:error, %{valid?: false, errors: errors}} = Validations.validate(params)
+      assert {:error, %{code: :validation, errors: errors}} = Validations.validate(params)
       assert Enum.any?(errors, &match?({:missing_query_params, _}, &1))
     end
 
     test "rejects invalid osm_id format" do
       assert {:ok, params} = LookupParams.new(osm_ids: "12345")
-      assert {:error, %{valid?: false}} = Validations.validate(params)
+      assert       {:error, %{code: :validation}} = Validations.validate(params)
 
       assert {:ok, params2} = LookupParams.new(osm_ids: "X12345")
-      assert {:error, %{valid?: false}} = Validations.validate(params2)
+      assert       {:error, %{code: :validation}} = Validations.validate(params2)
     end
   end
 
   describe "validate/1 for DetailsParams" do
     test "accepts place_id query" do
-      assert {:ok, params} = DetailsParams.new(place_id: 12345)
+      assert {:ok, params} = DetailsParams.new(place_id: 12_345)
       assert {:ok, %{valid?: true, errors: []}} = Validations.validate(params)
     end
 
     test "accepts osmtype + osmid query" do
-      assert {:ok, params} = DetailsParams.new(osmtype: "N", osmid: 96954428)
+      assert {:ok, params} = DetailsParams.new(osmtype: "N", osmid: 96_954_428)
       assert {:ok, %{valid?: true, errors: []}} = Validations.validate(params)
     end
 
     test "rejects both place_id and osmtype+osmid" do
-      assert {:ok, params} = DetailsParams.new(place_id: 12345, osmtype: "N", osmid: 96954428)
-      assert {:error, %{valid?: false, errors: errors}} = Validations.validate(params)
+      assert {:ok, params} = DetailsParams.new(place_id: 12_345, osmtype: "N", osmid: 96_954_428)
+      assert {:error, %{code: :validation, errors: errors}} = Validations.validate(params)
       assert Enum.any?(errors, &match?({:confusing_intent, _}, &1))
     end
 
     test "rejects neither place_id nor osmtype+osmid" do
-      assert {:ok, base} = DetailsParams.new(place_id: 12345)
+      assert {:ok, base} = DetailsParams.new(place_id: 12_345)
       params = %{base | place_id: nil}
-      assert {:error, %{valid?: false, errors: errors}} = Validations.validate(params)
+      assert {:error, %{code: :validation, errors: errors}} = Validations.validate(params)
       assert Enum.any?(errors, &match?({:missing_query_params, _}, &1))
     end
 
     test "rejects invalid osmtype" do
       assert {:ok, params} = DetailsParams.new(osmtype: "X", osmid: 123)
-      assert {:error, %{valid?: false}} = Validations.validate(params)
+      assert       {:error, %{code: :validation}} = Validations.validate(params)
     end
 
     test "rejects non-string osmtype" do
       assert {:ok, params} = DetailsParams.new(osmtype: 123, osmid: 456)
-      assert {:error, %{valid?: false}} = Validations.validate(params)
+      assert       {:error, %{code: :validation}} = Validations.validate(params)
     end
 
     test "rejects non-numeric osmid" do
       assert {:ok, params} = DetailsParams.new(osmtype: "N", osmid: "abc")
-      assert {:error, %{valid?: false}} = Validations.validate(params)
+      assert       {:error, %{code: :validation}} = Validations.validate(params)
     end
 
     test "rejects format other than json for details" do
       assert {:ok, params} = DetailsParams.new(place_id: 123, format: "xml")
-      assert {:error, %{valid?: false}} = Validations.validate(params)
+      assert       {:error, %{code: :validation}} = Validations.validate(params)
     end
   end
 
@@ -312,7 +312,7 @@ defmodule ExNominatim.ValidationsTest do
 
     test "rejects invalid format for status" do
       assert {:ok, params} = StatusParams.new(format: "xml")
-      assert {:error, %{valid?: false}} = Validations.validate(params)
+      assert       {:error, %{code: :validation}} = Validations.validate(params)
     end
   end
 

@@ -1,0 +1,185 @@
+# ExNominatim v3.0.0
+
+Full-featured client for the OpenStreetMap Nominatim API V1 (public and self-hosted).
+
+Not affiliated with OpenStreetMap or Nominatim.
+
+## Installation
+
+```elixir
+{:ex_nominatim, "~> 3.0"}
+```
+
+Runtime dependencies: req, telemetry.
+
+Optional dependencies: cachex (for caching), geohash (for geohash computation).
+
+## Public API
+
+### ExNominatim.search/1
+
+```elixir
+ExNominatim.search(opts)
+```
+
+Search OpenStreetMap objects by name or type.
+
+**Required (one of):**
+- `:q` — free-form query string
+- `:street`, `:city`, `:county`, `:state`, `:country`, `:postalcode`, `:amenity` — structured query fields
+
+**Optional parameters:**
+- `:limit` — max results (1-40, default 10)
+- `:format` — one of: xml, json, jsonv2, geojson, geocodejson (default geocodejson)
+- `:addressdetails`, `:extratags`, `:namedetails` — 0/1 or boolean
+- `:accept_language` — ISO 639-1 language codes
+- `:countrycodes` — ISO 3166-1 alpha-2 country codes
+- `:layer` — address, poi, railway, natural, manmade
+- `:featureType` — country, state, city, settlement
+- `:viewbox` — `<x1>,<y1>,<x2>,<y2>` where x=lon, y=lat
+- `:bounded` — 0/1, exclude results outside viewbox
+- `:polygon_geojson`, `:polygon_kml`, `:polygon_svg`, `:polygon_text` — 0/1
+- `:polygon_threshold` — float, tolerance in degrees
+- `:email` — valid email for large request volumes
+- `:dedupe` — 0/1, toggle deduplication
+- `:debug` — 0/1, output debug info
+- `:exclude_place_ids` — comma-separated place_id list
+
+### ExNominatim.reverse/1
+
+```elixir
+ExNominatim.reverse(opts)
+```
+
+Reverse geocode by coordinates.
+
+**Required:** `:lat` (float, -90..90), `:lon` (float, -180..180)
+
+**Optional:** `:zoom` (3,5,8,10,12-18, default 18), `:format`, `:addressdetails`, `:extratags`, `:namedetails`, `:accept_language`, `:email`, `:polygon_*` (same as search)
+
+### ExNominatim.lookup/1
+
+```elixir
+ExNominatim.lookup(opts)
+```
+
+Look up address details by OSM IDs.
+
+**Required:** `:osm_ids` — comma-separated, each prefixed with N/W/R (e.g., "N96954428,W12345")
+
+**Optional:** `:format`, `:addressdetails`, `:extratags`, `:namedetails`, `:accept_language`, `:email`, `:polygon_*`
+
+### ExNominatim.details/1
+
+```elixir
+ExNominatim.details(opts)
+```
+
+Internal details for an OSM object (debugging). Format limited to `json`.
+
+**Required (one of):**
+- `:place_id`
+- `:osmtype` (N/W/R) + `:osmid` (integer) + optionally `:class`
+
+**Optional:** `:addressdetails`, `:keywords`, `:linkedplaces`, `:hierarchy`, `:group_hierarchy`, `:format` (json only)
+
+### ExNominatim.status/1
+
+```elixir
+ExNominatim.status(opts)
+```
+
+Server status.
+
+**Optional:** `:format` — one of: text, json (default json)
+
+### Config options (may be passed in opts or set via app config)
+
+- `:base_url` — Nominatim server URL (default: https://nominatim.openstreetmap.org)
+- `:force` — boolean, skip validation (default: false)
+- `:process` — boolean, process response via Report (default: true)
+- `:atomize` — boolean, convert map keys to atoms (default: true)
+- `:cache` — module implementing `ExNominatim.Cache` protocol (e.g., `ExNominatim.CachexCache`)
+- `:rate_limit` — `:auto` (default, on for public server), `true` (always on, 1 req/s), `false` (off), or an integer N for N req/s
+- `:rate_limit_retry` — `true` (retry up to 3 times) or an integer N for max retries; only when rate-limited
+- `:req_opts` — keyword list of options merged into the Req request (headers, timeouts, etc.)
+- `:geohash` — `true` (default 12-char precision) or an integer precision; appends `:geohash` to results with lat/lon
+- `:test_adapter` — `{Req.Test, module}` tuple for test stubbing
+
+## Response (on success)
+
+```elixir
+{:ok, %{status: 200, body: [...]}}
+```
+
+Body format depends on the `:format` parameter and endpoint. With `atomize: true`, all map keys are atoms.
+
+## Error shape
+
+```elixir
+{:error, %{errors: [{:api, "message"}], body: nil, status: code}}
+```
+
+| Error stage | shape | example |
+|---|---|---|
+| Input validation | `{:error, :improper_list}` | Non-keyword-list passed |
+| Struct creation | `{:error, {:extraneous_fields, [:foo]}}` | Unknown field for endpoint |
+| Struct creation | `{:error, {:missing_query_params, [:lat, :lon]}}` | Required field absent |
+| Field validation | `{:error, %Struct{valid?: false, errors: [...]}}` | Value out of range |
+| Intent validation | `{:error, %Struct{valid?: false, errors: [...]}}` | Conflicting params |
+| URL validation | `{:error, :missing_scheme}` | URL without scheme |
+| HTTP dispatch | `{:error, reason}` | Transport error |
+| API error | `{:error, %{errors: [{:api, "..."}]}}` | Nominatim error response |
+
+## Rate Limiting
+
+Built-in, zero-dependency rate limiting via ETS. Enforces 1 req/s for the public Nominatim server by default (`:auto` mode). Pass `rate_limit: false` to disable, or `rate_limit: true` to enforce for all servers (including self-hosted).
+
+```elixir
+config :ex_nominatim, ExNominatim,
+  all: [rate_limit: :auto]   # :auto | true | false
+```
+
+The rate limiter sits between cache miss and HTTP dispatch — cached results bypass it entirely. Uses a best-effort ETS counter (no GenServer, no bottleneck).
+
+## Caching
+
+Optional via Cachex v4.x. Add `cachex` to your deps and pass `cache: ExNominatim.CachexCache` to any endpoint function.
+
+## Geohash
+
+Optional via the `geohash` hex package. Pass `geohash: true` (or integer precision) to any endpoint to append a `:geohash` key to results containing lat/lon.
+
+Configure:
+
+```elixir
+config :ex_nominatim, :cache_name, :ex_nominatim   # default
+config :ex_nominatim, :cache_ttl, 86_400_000        # 24 hours
+```
+
+Only successful results are cached. Errors never cache. When `cache: nil` (default), caching is disabled with zero overhead.
+
+## Configuration
+
+App config via `config :ex_nominatim, ExNominatim`:
+
+```elixir
+config :ex_nominatim, ExNominatim,
+  all: [base_url: "http://localhost:8080", force: false],
+  search: [format: "geocodejson"],
+  reverse: [namedetails: 1]
+```
+
+Precedence: defaults < `:all` < endpoint-specific < per-call opts.
+
+## Testing
+
+```elixir
+mix test
+```
+
+All tests use Req.Test stubs — no live Nominatim server required. Pass `:test_adapter` option to stub HTTP in integration-style tests.
+
+## Internal modules
+
+All internal modules (`Client`, `Validations`, `Report`, `Cache`, `CachexCache`, `TestCache`, and all `*Params` modules) are `@moduledoc false` — not part of the public API beyond the main `ExNominatim` module.

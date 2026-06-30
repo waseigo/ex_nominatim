@@ -16,12 +16,17 @@
 ## Features
 
 - Covers the `/search`, `/reverse`, `/lookup`, `/status` and `/details` endpoints.
+- `search_one/1` convenience for single-result lookups.
 - Utilizes request parameter structs with the appropriate fields (except for `json_callback`) for each endpoint.
 - Configurable for your application with overridable defaults using Elixir's `Config` module to set any default values, including the `:base_url` option for use with self-hosted Nominatim API instances.
 - Validates parameter values prior to the request (possible to override this with the `force: true` option).
 - Provides helpful return tuples `{:ok, ...}`, `{:error, reason}` and `{:error, {specific_error, other_info}}` across the board.
 - Collects all detected field validation errors in an `:errors` field, and provides a `:valid?` field in each request params struct.
 - Automatically sets the `User-Agent` header to "ExNominatim/{version}" to comply with the [Nominatim Usage Policy](https://operations.osmfoundation.org/policies/nominatim/).
+- Optional caching via Cachex (`:cache` option).
+- Built-in rate limiting with `:auto` mode for the public server.
+- Telemetry events for production observability.
+- Optional geohash computation on results with lat/lon.
 
 ## Installation
 
@@ -30,7 +35,7 @@ The package can be installed [from Hex](https://hex.pm/packages/ex_nominatim) by
 ```elixir
 def deps do
   [
-    {:ex_nominatim, "~> 2.1"}
+    {:ex_nominatim, "~> 3.0"}
   ]
 end
 ```
@@ -74,14 +79,102 @@ The configuration above has the following effects:
 - Unless requested otherwise in `opts`, requests to the `/search` endpoint will return data in GeocodeJSON format (instead of the default `jsonv2`).
 - Requests to the `/reverse` endpoint will set `:namedetails` to 1 (unless otherwise set in `opts`).
 - Requests to the `/status` endpoint will return JSON instead of the [default text](https://nominatim.org/release-docs/develop/api/Status/#output) (HTTP status code 200 and text `OK` or HTTP status 500 and a detailed error mesage).
-- The responses from all endpoints will be processed automatically using `ExNominatim.Report.process/1`, and any maps and contents thereof (or map contents of structs's keys) will be converted from bitstring keys to atom keys using `ExNominatim.Report.atomize/1`.
+- The responses from all endpoints will be processed automatically using `ExNominatim.Report.process/1`, and any maps and contents thereof (or map contents of structs's keys) will be converted from binary keys to atom keys using `ExNominatim.Report.atomize/1`.
 
 Refer to [the documentation of the main `ExNominatim` module](https://hexdocs.pm/ex_nominatim/ExNominatim.html) for more information.
 
+## Rate Limiting
+
+Built-in rate limiting (zero dependencies) that enforces 1 req/s for the public Nominatim server by default.
+
+| Config value | Behavior |
+|---|---|
+| `:auto` (default) | 1 req/s for `nominatim.openstreetmap.org`, no limit for other servers |
+| `true` | 1 req/s for all servers |
+| `false` | Disabled |
+| integer (e.g. `5`) | N req/s for all servers |
+
+```elixir
+# Disable for self-hosted servers
+config :ex_nominatim, ExNominatim,
+  all: [rate_limit: false]
+
+# Or explicitly enable for all servers
+config :ex_nominatim, ExNominatim,
+  all: [rate_limit: true]
+
+# Or set a custom rate (e.g. 5 req/s)
+config :ex_nominatim, ExNominatim,
+  all: [rate_limit: 5]
+```
+
+The rate limiter uses an ETS table (no GenServer, no bottleneck) and is checked **after** cache lookup but **before** HTTP dispatch — cached results bypass it entirely. Errors return `{:error, {:rate_limited, retry_after_ms}}`. Set `rate_limit_retry: true` to automatically sleep and retry up to 3 times.
+
+## Telemetry
+
+ExNominatim emits the following Telemetry events:
+
+| Event | Measurements | Metadata |
+|---|---|---|
+| `[:ex_nominatim, :request, :stop]` | `duration` | `endpoint`, `base_url`, `status` |
+| `[:ex_nominatim, :request, :exception]` | `duration` | `endpoint`, `base_url`, `error` |
+| `[:ex_nominatim, :cache, :hit]` | — | `endpoint` |
+| `[:ex_nominatim, :cache, :miss]` | — | `endpoint` |
+| `[:ex_nominatim, :rate_limit, :deny]` | — | `endpoint`, `base_url`, `retry_after_ms` |
+
+Attach handlers via `:telemetry.attach/4` to build dashboards, alert on errors, or log cache hit rates.
+
+## Geohash
+
+Pass `geohash: true` (or an integer precision) to append a `:geohash` key to each result that has lat/lon fields:
+
+```elixir
+{:ok, %{body: [%{lat: "38.0", lon: "23.7", geohash: "sryj481k2m4d", ...}]}} =
+  ExNominatim.search(q: "Athens", geohash: true)
+```
+
+Requires the optional `geohash` hex package in your deps:
+```elixir
+{:geohash, "~> 1.0"}
+```
+
+## Custom Req options
+
+Pass any Req option via `:req_opts` — useful for custom headers, timeouts, or connection options:
+
+```elixir
+ExNominatim.search(q: "Athens", req_opts: [
+  headers: [authorization: "Bearer xyz"],
+  receive_timeout: 5000
+])
+```
+
+## Caching
+
+Optionally cache successful Nominatim responses via [Cachex](https://hexdocs.pm/cachex/Cachex.html):
+
+```elixir
+# mix.exs
+{:cachex, "~> 4.0"}
+
+# config/config.exs
+config :ex_nominatim, :cache_name, :ex_nominatim   # default
+config :ex_nominatim, :cache_ttl, 86_400_000        # 24 hours
+```
+
+Pass `cache: ExNominatim.CachexCache` to any endpoint:
+
+```elixir
+ExNominatim.search(q: "Athens", cache: ExNominatim.CachexCache)
+```
+
+Only successful results are cached. Errors never cache. When `cache: nil` (default), caching is disabled with zero overhead.
+
+You can implement custom cache backends via the `ExNominatim.Cache` protocol.
+
 ## Ideas and someday/maybe features
 
-- Build [Cachex](https://hexdocs.pm/cachex/Cachex.html) in (see [Reactive Warming](https://hexdocs.pm/cachex/reactive-warming.html)) and provide the option to automatically throttle requests to the public API to the "absolute maximum of 1 request per second" as requested by the [Nominatim Usage Policy](https://operations.osmfoundation.org/policies/nominatim/).
-- Implement a test suite.
+- none at the moment
 
 ## Who made this?
 

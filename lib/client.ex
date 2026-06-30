@@ -2,10 +2,16 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule ExNominatim.Client do
-  alias ExNominatim.{Validations, Report}
+  alias ExNominatim.Client.{Cache, Geohash, Request}
+  alias ExNominatim.{Report, Validations}
 
   @config ExNominatim.get_config()
-  @config_specific_keys [:base_url, :force, :process, :atomize]
+  @config_specific_keys [
+    :base_url, :force, :process, :atomize, :cache, :test_adapter, :rate_limit,
+    :rate_limit_retry, :req_opts, :geohash,
+    :timeout, :user_agent, :retry, :circuit_breaker, :max_concurrency,
+    :cache_errors, :cache_error_ttl
+  ]
   @validation_keys [:errors, :valid?]
   @endpoints [:search, :reverse, :status, :lookup, :details]
 
@@ -47,18 +53,161 @@ defmodule ExNominatim.Client do
   @doc """
   Use the `/status` API endpoint without setting any request parameters. Delegated to from `ExNominatim.status/0`, which is documented.
   """
-  def status(), do: generic(:status, [])
+  def status, do: generic(:status, [])
+
+  # ---- Pipeline ----
 
   defp generic(action, opts) when is_list(opts) and action in @endpoints do
     with {:keyword?, true} <- {:keyword?, Keyword.keyword?(opts)},
          {:new, {:ok, {m, config_opts}}} when is_struct(m) <-
            {:new, make_new_struct(opts, action)} do
-      generic_request(action, m, config_opts)
+      cache = Keyword.get(config_opts, :cache)
+      key = Cache.key(action, m, @validation_keys)
+      base_url = Keyword.get(config_opts, :base_url)
+
+      case Cache.get(cache, key) do
+        {:ok, data} ->
+          ExNominatim.Telemetry.cache_hit(action)
+          {:ok, data}
+
+        {:error, _} = cached_error ->
+          ExNominatim.Telemetry.cache_hit(action)
+          cached_error
+
+        :miss ->
+          ExNominatim.Telemetry.cache_miss(action)
+          handle_cache_miss(action, m, config_opts, cache, key, base_url)
+      end
     else
-      {:keyword?, false} -> {:error, :improper_list}
+      {:keyword?, false} -> {:error, %{code: :validation, descr: "Opts must be a keyword list"}}
       {:new, {:error, reason}} -> {:error, reason}
     end
   end
+
+  defp handle_cache_miss(action, m, config_opts, cache, key, base_url) do
+    case ExNominatim.CircuitBreaker.check(base_url, config_opts) do
+      :ok ->
+        do_request_with_retry(action, m, config_opts, cache, key)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # ---- Rate-limit-aware retry loop (pre-HTTP) ----
+
+  defp do_request_with_retry(action, m, config_opts, cache, key) do
+    base_url = config_opts[:base_url]
+
+    case check_rate_limit(config_opts) do
+      :ok ->
+        case ExNominatim.Concurrency.acquire(base_url, config_opts) do
+          :ok ->
+            result = execute_with_network_retry(action, m, config_opts, cache, key, 1)
+            ExNominatim.Concurrency.release(base_url)
+            result
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+
+      {:error, %{code: :rate_limited, retry_after_ms: retry_after}} ->
+        ExNominatim.Telemetry.rate_limit_deny(action, base_url, retry_after)
+
+        if rate_limit_retries_left?(config_opts) do
+          Process.sleep(retry_after)
+          do_request_with_retry(action, m, config_opts, cache, key)
+        else
+          {:error,
+           %{code: :rate_limited, descr: "Rate limit exceeded", retry_after_ms: retry_after}}
+        end
+    end
+  end
+
+  defp rate_limit_retries_left?(config_opts) do
+    # Rate-limit retry uses the existing :rate_limit_retry config as an
+    # *attempt budget* similar to the legacy approach — any positive value
+    # means "retry at least once".
+    case Keyword.get(config_opts, :rate_limit_retry, false) do
+      true -> true
+      n when is_integer(n) and n > 0 -> true
+      _ -> false
+    end
+  end
+
+  # ---- Network-level retry loop (post-HTTP, for transport / 5xx) ----
+
+  defp execute_with_network_retry(action, m, config_opts, cache, key, attempt) do
+    base_url = config_opts[:base_url]
+    start = System.monotonic_time()
+    result = generic_request(action, m, config_opts)
+    result = Geohash.add(result, config_opts)
+    duration = System.monotonic_time() - start
+
+    case result do
+      {:ok, %{status: status} = data} ->
+        :telemetry.execute([:ex_nominatim, :request, :stop], %{duration: duration}, %{
+          endpoint: action, base_url: base_url, status: status
+        })
+        ExNominatim.CircuitBreaker.record_success(base_url)
+        Cache.store(cache, key, {:ok, data})
+        {:ok, data}
+
+      {:error, reason} ->
+        :telemetry.execute([:ex_nominatim, :request, :exception], %{duration: duration}, %{
+          endpoint: action, base_url: base_url, error: reason
+        })
+
+        if retryable_error?(result) and attempt < network_max_attempts(config_opts) do
+          ExNominatim.Telemetry.retry_attempt(action, base_url, attempt, reason)
+          backoff_ms = network_backoff(attempt, config_opts)
+          Process.sleep(backoff_ms)
+          execute_with_network_retry(action, m, config_opts, cache, key, attempt + 1)
+        else
+          ExNominatim.CircuitBreaker.record_failure(base_url, config_opts)
+          Cache.store_error(cache, key, result, config_opts)
+          result
+        end
+    end
+  end
+
+  defp retryable_error?({:error, %{code: :api_error, status: status}}) when status >= 500, do: true
+  defp retryable_error?({:error, %{code: :api_error, status: 429}}), do: true
+  defp retryable_error?({:error, %{code: :api_error}}), do: false
+  defp retryable_error?({:error, %{code: _other}}), do: false
+  defp retryable_error?({:error, _}), do: true
+
+  defp network_max_attempts(config_opts) do
+    case Keyword.get(config_opts, :retry, false) do
+      false -> 1
+      true -> 4
+      n when is_integer(n) and n > 0 -> min(n + 1, 10)
+      opts when is_list(opts) -> (Keyword.get(opts, :max_retries, 3) || 3) + 1
+    end
+  end
+
+  defp network_backoff(attempt, config_opts) do
+    retry_config = Keyword.get(config_opts, :retry, false)
+
+    base_delay =
+      if is_list(retry_config), do: Keyword.get(retry_config, :base_delay, 100), else: 100
+
+    max_delay =
+      if is_list(retry_config), do: Keyword.get(retry_config, :max_delay, 5_000), else: 5_000
+
+    jitter? =
+      if is_list(retry_config), do: Keyword.get(retry_config, :jitter, true), else: true
+
+    delay = min(max_delay, base_delay * 2 ** (attempt - 1))
+
+    if jitter? do
+      trunc(delay * (1 + :rand.uniform() * 0.5))
+    else
+      delay
+    end
+  end
+
+  # ---- Struct construction ----
 
   defp make_new_struct(opts, action) do
     provided = Keyword.keys(opts) -- @config_specific_keys
@@ -67,7 +216,12 @@ defmodule ExNominatim.Client do
     extraneous = provided -- permitted_keys(struct(module))
 
     if extraneous != [] do
-      {:error, {:extraneous_fields, extraneous}}
+      {:error,
+       %{
+         code: :validation,
+         descr: "Extraneous fields: #{inspect(extraneous)}",
+         extraneous_fields: extraneous
+       }}
     else
       app_config = ExNominatim.get_config()
 
@@ -79,7 +233,7 @@ defmodule ExNominatim.Client do
 
       config_opts = Keyword.take(opts_new, @config_specific_keys)
 
-      case apply(module, :new, [opts_new]) do
+      case module.new(opts_new) do
         {:ok, m} when is_struct(m) ->
           {:ok, {m, config_opts}}
 
@@ -93,6 +247,8 @@ defmodule ExNominatim.Client do
     m |> Map.from_struct() |> Map.keys() |> Kernel.--(@validation_keys)
   end
 
+  # ---- HTTP request ---- #
+
   defp generic_request(action, params_struct, config_opts)
        when action in @endpoints and is_struct(params_struct) and is_list(config_opts) do
     s = get_module(action)
@@ -101,6 +257,7 @@ defmodule ExNominatim.Client do
     base_url = Keyword.get(config_opts, :base_url)
     process? = Keyword.get(config_opts, :process)
     atomize? = Keyword.get(config_opts, :atomize)
+    test_adapter = Keyword.get(config_opts, :test_adapter)
 
     # skip validation if force: true in config_opts
     maybe_validated =
@@ -108,7 +265,10 @@ defmodule ExNominatim.Client do
 
     with {:ok, %^s{} = maybe_valid_params} <- maybe_validated,
          {:ok, %Req.Request{} = req} <- prepare(action, maybe_valid_params, base_url),
-         {:ok, %Req.Response{} = resp} <- Req.request(req) do
+         req <- Request.apply_req_opts(req, config_opts),
+         req <- Request.apply_http_options(req, config_opts),
+         {:ok, %Req.Response{} = resp} <-
+           req |> maybe_attach_adapter(test_adapter) |> Req.request() do
       output = {:ok, resp}
 
       case {process?, atomize?} do
@@ -140,19 +300,8 @@ defmodule ExNominatim.Client do
     |> Module.safe_concat()
   end
 
-  # unused
-  # defp get_action(module) when is_atom(module) do
-  #   module
-  #   |> Module.split()
-  #   |> List.last()
-  #   |> Macro.underscore()
-  #   |> String.split()
-  #   |> hd()
-  #   |> String.to_atom()
-  # end
-
   @doc """
-  Create a new request params struct from the provided keyword list `opts`, taking into account any required fields listed as atoms in the `required` list. Delegated to from the `new/1` function of the modules of `SearchParams`, `ReverseParams`, etc. (the `module`).
+  Create a new request params struct from the provided keyword list `opts`, taking into account any required fields listed as atoms in the `required` list. Delegated to from the `new/1` functions of the modules of `SearchParams`, `ReverseParams`, etc. (the `module`).
   """
   def new(opts, required, module) when is_list(opts) and is_list(required) and is_atom(module) do
     with {:keyword?, true} <- {:keyword?, Keyword.keyword?(opts)},
@@ -160,8 +309,9 @@ defmodule ExNominatim.Client do
            {:required, opts |> Keyword.take(required) |> Keyword.keys()} do
       new(Map.new(opts), module)
     else
-      {:keyword?, false} -> {:error, {:improper_list, opts}}
-      {:required, _} -> {:error, {:missing_query_params, required}}
+      {:keyword?, false} -> {:error, %{code: :validation, descr: "Opts must be a keyword list"}}
+      {:required, _} ->
+        {:error, %{code: :validation, descr: "Missing required parameters: #{inspect(required)}", missing: required}}
     end
   end
 
@@ -169,7 +319,7 @@ defmodule ExNominatim.Client do
     {:ok, module |> struct() |> Map.merge(params)}
   end
 
-  # HTTP request preparation
+  # ---- HTTP request preparation ----
 
   @doc """
   Prepares an HTTP request to the `endpoint` at `base_url` with the `params` map containing request parameters.
@@ -183,69 +333,30 @@ defmodule ExNominatim.Client do
 
   def prepare(endpoint, params, base_url)
       when endpoint in @endpoints and is_map(params) and params != %{} and is_binary(base_url) do
-    with {:ok, %Req.Request{} = req} <- base(base_url) do
-      params = keep_query_params(params)
+    case Request.base(base_url) do
+      {:ok, %Req.Request{} = req} ->
+        params = keep_query_params(params)
 
-      {:ok,
-       req
-       |> Req.merge(url: endpoint_url(endpoint))
-       |> Req.merge(params: params)}
-    else
-      {:error, reason} -> {:error, reason}
+        {:ok,
+         req
+         |> Req.merge(url: endpoint_url(endpoint))
+         |> Req.merge(params: params)}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
   def prepare(endpoint, _, _) when not is_atom(endpoint) and endpoint not in @endpoints do
-    {:error, :invalid_endpoint}
+    {:error, %{code: :validation, descr: "Invalid endpoint: #{inspect(endpoint)}"}}
   end
 
   def prepare(_, params, _) when params == %{} do
-    {:error, :empty_params}
+    {:error, %{code: :validation, descr: "Params must not be empty"}}
   end
 
   def prepare(_, params, _) when not is_map(params) do
-    {:error, :invalid_params}
-  end
-
-  defp base(url) do
-    with {:ok, url} <- validate_url(url) do
-      {:ok,
-       Req.new(
-         base_url: url,
-         method: :get,
-         headers: %{
-           user_agent: user_agent()
-         },
-         cache: true
-       )}
-    else
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp user_agent do
-    client =
-      __MODULE__
-      |> Module.split()
-      |> hd()
-
-    version =
-      client
-      |> Macro.underscore()
-      |> String.to_atom()
-      |> Application.spec(:vsn)
-
-    List.to_string([client, "/", version])
-  end
-
-  # Adapted from https://gist.github.com/atomkirk/74b39b5b09c7d0f21763dd55b877f998
-  defp validate_url(url) do
-    case URI.parse(url) do
-      %URI{scheme: nil} -> {:error, :missing_scheme}
-      %URI{host: nil} -> {:error, :missing_host}
-      %URI{host: ""} -> {:error, :missing_host}
-      %URI{host: host} when is_binary(host) -> {:ok, url}
-    end
+    {:error, %{code: :validation, descr: "Params must be a map"}}
   end
 
   defp endpoint_url(endpoint) when is_atom(endpoint), do: to_string(endpoint)
@@ -259,4 +370,44 @@ defmodule ExNominatim.Client do
       not (is_nil(v) or k in (@validation_keys ++ @config_specific_keys))
     end)
   end
+
+  # --- Rate limiting ---
+
+  defp check_rate_limit(config_opts) do
+    base_url = Keyword.get(config_opts, :base_url)
+
+    case Keyword.get(config_opts, :rate_limit, :auto) do
+      false ->
+        :ok
+
+      :auto ->
+        if ExNominatim.RateLimiter.public_server?(base_url) do
+          ExNominatim.RateLimiter.check(base_url, 1000)
+        else
+          :ok
+        end
+
+      true ->
+        ExNominatim.RateLimiter.check(base_url, 1000)
+
+      rps when is_integer(rps) and rps > 0 ->
+        ExNominatim.RateLimiter.check(base_url, max(1, round(1000 / rps)))
+
+      _ ->
+        :ok
+    end
+  end
+
+  # --- Test adapter ---
+
+  defp maybe_attach_adapter(req, nil), do: req
+
+  defp maybe_attach_adapter(req, {Req.Test, _module} = adapter) do
+    req |> Req.merge(plug: adapter) |> Req.merge(retry: false)
+  end
+
+  defp maybe_attach_adapter(req, plug_module) when is_atom(plug_module) do
+    req |> Req.merge(plug: plug_module) |> Req.merge(retry: false)
+  end
+
 end

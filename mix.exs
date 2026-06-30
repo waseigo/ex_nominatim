@@ -4,7 +4,7 @@ defmodule Nominatim.MixProject do
   def project do
     [
       app: :ex_nominatim,
-      version: "2.1.0",
+      version: "3.0.0",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       description: description(),
@@ -20,19 +20,20 @@ defmodule Nominatim.MixProject do
         logo: "./etc/assets/ex_nominatim_logo.png",
         assets: "etc/assets",
         extras: ["README.md"]
-      ]
+      ],
+      test_coverage: [summary: [threshold: 80]]
     ]
   end
 
   defp description do
     """
-    A full-featured client for the OpenStreetMap Nominatim API V1 (public and self-hosted), with extensive request validation, robust error-handling and reporting, and user guidance with helpful validation messages.
+    A full-featured client for the OpenStreetMap Nominatim API V1 (public and self-hosted), with extensive request validation, robust error-handling and reporting, circuit breaker, rate limiting, concurrency control, concurrent streaming, optional caching, telemetry instrumentation, retry with exponential backoff, and geohash enrichment.
     """
   end
 
   defp package do
     [
-      files: ["lib", "mix.exs", "README*", "LICENSE*"],
+      files: ["lib", "mix.exs", "README*", "LICENSE*", "llms.txt", "config"],
       maintainers: ["Isaak Tsalicoglou"],
       licenses: ["Apache-2.0"],
       links: %{
@@ -51,9 +52,13 @@ defmodule Nominatim.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:req, "~> 0.5"},
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:ex_doc, "~> 0.31.0", only: :dev, runtime: false}
+      {:req, "~> 0.5.0"},
+      {:telemetry, "~> 1.0"},
+      {:geohash, "~> 1.0", optional: true},
+      {:cachex, "~> 4.1", only: [:dev, :test], runtime: false},
+      {:plug, "~> 1.4", only: :test, runtime: false},
+      {:credo, "~> 1.7.19", only: [:dev, :test], runtime: false},
+      {:ex_doc, "~> 0.40.3", only: :dev, runtime: false}
     ]
   end
 end

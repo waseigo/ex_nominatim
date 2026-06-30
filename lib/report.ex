@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2024 Isaak Tsalicoglou <isaak@overbring.com>
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule ExNominatim.Report do
   @moduledoc """
   Functions for reporting processed responses from the Nominatim API.
@@ -8,44 +11,26 @@ defmodule ExNominatim.Report do
   Convert the output of any of the endpoint functions to a more usable map.
   """
   def process({:ok, %Req.Response{body: body} = resp}) do
-    p = {
-      ((resp.status == 200 and not detect_error_in_body(body)) && :ok) || :error,
-      %{status: resp.status, body: resp.body}
-    }
-
-    case p do
-      {:ok, _} -> p
-      _ -> process(p)
+    if resp.status == 200 and not detect_error_in_body(body) do
+      {:ok, %{status: resp.status, body: resp.body}}
+    else
+      msg = extract_error_from_body(body) || "Unknown API error"
+      {:error, %{code: :api_error, descr: msg, status: resp.status}}
     end
   end
 
   def process({:error, %Req.Response{body: body} = resp}) do
-    {:error,
-     %{
-       errors: [
-         api: extract_error_from_body(body)
-       ],
-       body: nil,
-       status: resp.status
-     }}
+    msg = extract_error_from_body(body) || "HTTP #{resp.status}"
+    {:error, %{code: :api_error, descr: msg, status: resp.status}}
   end
 
   def process({:error, s}) when is_struct(s) do
-    {:error,
-     %{
-       errors: s.errors,
-       body: nil,
-       status: nil
-     }}
+    {:error, %{code: :validation, descr: "Field validation failed", errors: s.errors}}
   end
 
   def process({:error, %{body: body} = s}) do
-    {:error,
-     %{
-       errors: [flatten(extract_error_from_body(body))],
-       body: nil,
-       status: s.status
-     }}
+    msg = extract_error_from_body(body) || "Unknown error"
+    {:error, %{code: :api_error, descr: msg, status: s[:status]}}
   end
 
   def process({:error, t} = v) when is_tuple(t), do: v
@@ -74,9 +59,6 @@ defmodule ExNominatim.Report do
     end
   end
 
-  defp flatten(%{"code" => _, "message" => message}), do: {:api, message}
-  defp flatten(message) when is_binary(message), do: {:api, message}
-
   @doc """
   Given a map, a list of maps, or a struct, convert all keys from binaries to atoms. binary keys including dashes will have all their dashes replaced with underscores.
   """
@@ -101,6 +83,9 @@ defmodule ExNominatim.Report do
 
   def atomize(x) when not is_struct(x) and not is_map(x), do: x
 
+  @doc """
+  Safely convert a binary string to an atom, replacing dashes with underscores. Passes through existing atoms unchanged.
+  """
   def to_atom(s) when is_binary(s) do
     s
     |> String.replace("-", "_")

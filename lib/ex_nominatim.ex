@@ -8,7 +8,8 @@ defmodule ExNominatim do
   # for testing purposes during development
   # @nominatim_public_api "http://localhost:8080"
 
-  # If the following line is uncommented, it will point to a self-hosted Nominatim API server when ExNominatim or an overarching app that uses it is in the :dev or :test environment.
+  # If uncommented, points to a self-hosted Nominatim API server when ExNominatim
+  # or an overarching app that uses it is in the :dev or :test environment.
   # @nominatim_public_api (Mix.env() in [:dev, :test]) && "http://localhost:8080" || "https://nominatim.openstreetmap.org"
 
   @moduledoc """
@@ -31,7 +32,8 @@ defmodule ExNominatim do
       force: true,
       format: "json",
       process: true,
-      atomize: true
+      atomize: true,
+      rate_limit: false
     ],
     search: [format: "geocodejson", force: false],
     reverse: [namedetails: 1],
@@ -114,6 +116,42 @@ defmodule ExNominatim do
   defdelegate status(), to: Client
 
   @doc """
+  Same as `search/1`, but returns a single result map instead of a list.
+
+  Returns `{:ok, result}` on exactly one result, `{:error, %{code: :not_found, descr: "No results found"}}` when
+  the result list is empty, or `{:error, %{code: :multiple_results, descr: _, count: _}}` when
+  more than one result is returned. Pass through all other errors unchanged.
+  """
+  def search_one(opts) do
+    case Client.search(opts) do
+      {:ok, %{body: [single]}} ->
+        {:ok, single}
+
+      {:ok, %{body: []}} ->
+        {:error, %{code: :not_found, descr: "No results found"}}
+
+      {:ok, %{body: list}} when is_list(list) ->
+        {:error, %{code: :multiple_results, descr: "Expected single result, got #{length(list)}", count: length(list)}}
+
+      {:ok, result} ->
+        {:ok, result}
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  @doc """
+  Same as `search_one/1`, but returns the result directly or raises on error.
+  """
+  def search_one!(opts) do
+    case search_one(opts) do
+      {:ok, result} -> result
+      {:error, reason} -> raise "search_one failed: #{reason.descr}"
+    end
+  end
+
+  @doc """
   Given a request params struct (`%ReverseParams{}`, `%SearchParams{}`, etc.), a keyword list, or a list of atoms corresponding to keys, explain the fields, their default values (if any) and their values' limits (if applicable). It ignores any keyword list keys or atoms in the list that do not correspond to request parameters.
 
   Alternatively, provide the atom corresponding to an endpoint (e.g., `:search` for `/search`) to get the explanations of the parameters specific to that endpoint.
@@ -130,9 +168,56 @@ defmodule ExNominatim do
   defdelegate explain_fields(), to: Validations
 
   @doc """
+  Concurrently search across multiple query option sets.
+
+  Takes a list of keyword-list option sets and returns a lazy `Stream` of
+  results in completion order. Results are the full return values of
+  `Client.search/1` — `{:ok, %{status: _, body: _}}` or
+  `{:error, %{code: _, descr: _}}`.
+
+  ## Options
+
+    * `:max_concurrency` — max in‑flight HTTP requests (default `5`).
+
+  All other keyword keys in `runner_opts` are merged as base options into
+  every query set.
+
+  ## Examples
+
+      [q: "Athens", limit: 1],
+      [q: "Paris",  limit: 1],
+      [q: "London", limit: 1]
+    ]
+    |> ExNominatim.stream_many(max_concurrency: 3)
+    |> Enum.to_list()
+  """
+  def stream_many(list_of_opts, runner_opts \\ []) when is_list(list_of_opts) and is_list(runner_opts) do
+    ExNominatim.StreamMany.stream(list_of_opts, runner_opts)
+  end
+
+  @doc """
+  Check whether the Nominatim server at the default `base_url` is healthy.
+
+  Calls the `/status` endpoint and returns `true` when the response is
+  `200 OK` with body `"OK"`.
+
+  ## Examples
+
+      ExNominatim.healthy?()
+      # => {:ok, true}
+  """
+  def healthy?(opts \\ []) do
+    case Client.status(opts) do
+      {:ok, %{status: 200, body: "OK"}} -> {:ok, true}
+      {:ok, _} -> {:ok, false}
+      {:error, _} -> {:ok, false}
+    end
+  end
+
+  @doc """
   Show the current configuration defaults.
   """
-  def get_config() do
+  def get_config do
     case Application.fetch_env(:ex_nominatim, ExNominatim) do
       {:ok, config} ->
         Keyword.merge(default_config(), config)
@@ -148,7 +233,18 @@ defmodule ExNominatim do
         base_url: @nominatim_public_api,
         force: false,
         process: true,
-        atomize: true
+        atomize: true,
+        cache: nil,
+        rate_limit: :auto,
+        rate_limit_retry: false,
+        geohash: false,
+        timeout: 15_000,
+        user_agent: nil,
+        retry: false,
+        circuit_breaker: false,
+        max_concurrency: :infinity,
+        cache_errors: false,
+        cache_error_ttl: 30_000
       ],
       search: [],
       reverse: [format: "geocodejson"],

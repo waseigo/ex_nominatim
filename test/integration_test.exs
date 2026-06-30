@@ -26,7 +26,7 @@ defmodule ExNominatim.IntegrationTest do
       assert {:ok, result} = Client.search(q: "Athens, Greece", limit: 2)
       assert %{status: 200, body: body} = result
       assert is_list(body)
-      assert length(body) > 0
+      assert body != []
       assert [%{lat: _, lon: _, display_name: _} | _] = body
     end
 
@@ -34,7 +34,7 @@ defmodule ExNominatim.IntegrationTest do
       assert {:ok, result} = Client.search(city: "Athens", country: "gr", limit: 1)
       assert %{status: 200, body: body} = result
       assert is_list(body)
-      assert length(body) > 0
+      assert body != []
     end
 
     test "respects limit parameter" do
@@ -56,7 +56,7 @@ defmodule ExNominatim.IntegrationTest do
       assert %{type: "FeatureCollection"} = body
       assert %{features: features} = body
       assert is_list(features)
-      assert length(features) > 0
+      assert features != []
     end
 
     test "returns geocodejson by default" do
@@ -71,7 +71,7 @@ defmodule ExNominatim.IntegrationTest do
       assert {:ok, result} = Client.lookup(osm_ids: "N441183")
       assert %{status: 200, body: body} = result
       assert is_list(body)
-      assert length(body) > 0
+      assert body != []
       assert [%{place_id: _, display_name: _} | _] = body
     end
   end
@@ -93,7 +93,7 @@ defmodule ExNominatim.IntegrationTest do
 
   describe "details endpoint" do
     test "returns details by osmtype and osmid" do
-      assert {:ok, result} = Client.details(osmtype: "N", osmid: 441183)
+      assert {:ok, result} = Client.details(osmtype: "N", osmid: 441_183)
       assert %{status: 200, body: body} = result
       assert is_map(body)
     end
@@ -134,7 +134,7 @@ defmodule ExNominatim.IntegrationTest do
   describe "force bypass" do
     test "sends request with invalid params when force is true" do
       assert {:error, result} = Client.search(q: "Athens", force: true, format: "invalid_format")
-      assert %{status: 400, errors: [{:api, _}]} = result
+      assert %{code: :api_error, status: 400} = result
     end
   end
 
