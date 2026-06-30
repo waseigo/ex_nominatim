@@ -19,7 +19,7 @@ defmodule Nominatim.MixProject do
         main: "readme",
         logo: "./etc/assets/ex_nominatim_logo.png",
         assets: %{"etc/assets" => "assets"},
-        extras: ["README.md"]
+        extras: ["README.md", "TELEMETRY.md", "DESIGN.md"]
       ],
       test_coverage: [summary: [threshold: 80]]
     ]
@@ -33,7 +33,7 @@ defmodule Nominatim.MixProject do
 
   defp package do
     [
-      files: ["lib", "mix.exs", "README*", "LICENSE*", "llms.txt", "config"],
+      files: ["lib", "mix.exs", "README*", "LICENSE*", "TELEMETRY.md", "DESIGN.md", "llms.txt", "config"],
       maintainers: ["Isaak Tsalicoglou"],
       licenses: ["Apache-2.0"],
       links: %{
