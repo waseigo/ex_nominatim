@@ -27,7 +27,7 @@ defmodule Nominatim.MixProject do
 
   defp description do
     """
-    A full-featured client for the OpenStreetMap Nominatim API V1 (public and self-hosted), with extensive request validation, robust error-handling and reporting, circuit breaker, rate limiting, concurrency control, concurrent streaming, optional caching, telemetry instrumentation, retry with exponential backoff, and geohash enrichment.
+    A full-featured client for the OpenStreetMap Nominatim API V1 (public and self-hosted), with extensive request validation, robust error-handling and reporting, rate limiting, optional caching, telemetry instrumentation, retry with exponential backoff, and geohash enrichment.
     """
   end
 
