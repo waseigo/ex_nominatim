@@ -181,3 +181,15 @@ You can implement custom cache backends via the `ExNominatim.Cache` protocol.
 Copyright 2024, made by [Isaak Tsalicoglou](https://linkedin.com/in/tisaak), Managing Director of [OVERBRING Labs](https://overbring.com) in [Athens](https://www.openstreetmap.org/#map=11/37.9909/23.7387), [Attica](https://www.openstreetmap.org/#map=8/37.061/23.456), [Greece](https://www.openstreetmap.org/#map=6/38.310/24.489).
 
 Many thanks to all the volunteers and contributors of [OpenStreetMap](https://www.openstreetmap.org/) and [Nominatim](https://nominatim.org/).
+
+## Support
+
+If this library saves you time or helps your project, consider saying thanks by purchasing a copy of [**Northwind Elixir Traders**](https://leanpub.com/northwind-elixir-traders), an exploratory-learning book that teaches Elixir, Ecto, and SQLite all in one hands-on project, with its [source code](https://github.com/waseigo/northwind_elixir_traders) released under the Apache-2.0 License.
+
+<a href="https://leanpub.com/northwind-elixir-traders">
+  <img src="https://raw.githubusercontent.com/waseigo/northwind_elixir_traders/main/etc/northwind-elixir-traders-cover.jpg"
+       width="200"
+       alt="Northwind Elixir Traders cover">
+</a>
+
+See what readers are saying on the [book's ElixirForum thread](https://elixirforum.com/t/northwind-elixir-traders-pragprog/70887).

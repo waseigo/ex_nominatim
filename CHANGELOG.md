@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.0.0] - unreleased
+## [3.0.0] - 2026-07-01
 
 ### Added
 
@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Emits `[:ex_nominatim, :circuit_breaker, :state_change]` telemetry on transitions.
 - Concurrency limiter (`ExNominatim.Concurrency`) — ETS-backed semaphore per
   `base_url` via `:max_concurrency` config option (integer or `:infinity`).
+- Rate limiting via `ExNominatim.RateLimiter` — zero-dependency, ETS-backed, best-effort.
+  `:rate_limit` config option (`:auto` | `true` | `false` | integer).
+  - `:auto` (default): 1 req/s enforced for `nominatim.openstreetmap.org`, disabled for other servers.
+  - `true`: 1 req/s enforced for all servers.
+  - `false`: rate limiting disabled entirely.
+  - `integer`: N req/s enforced for all servers (e.g. `rate_limit: 5` for 5 req/s).
 - Timeout config via `:timeout` option (integer ms, default 15_000) — maps to
   Req `receive_timeout` and `connect_options`.
 - User-Agent config via `:user_agent` option (string, default `"ExNominatim/{version}"`).
@@ -27,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ExNominatim.healthy?/1` — health check calling `/status`, returns `{:ok, boolean()}`.
 - Error caching: `:cache_errors` (boolean, default false) and `:cache_error_ttl`
   (integer ms, default 30_000) for caching API error responses.
+- Optional result caching via Cachex v4.x (`:cache` option on all endpoint functions).
+  - `ExNominatim.Cache` protocol for custom cache adapters.
+  - `ExNominatim.CachexCache` built-in adapter.
+  - `ExNominatim.TestCache` for isolated cache testing.
+  - Cache key based on endpoint and normalized query parameters.
+  - Only successful results cached; errors never cache.
 - Telemetry events: `[:ex_nominatim, :request, :stop]`, `[:ex_nominatim, :request, :exception]`,
   `[:ex_nominatim, :cache, :hit]`, `[:ex_nominatim, :cache, :miss]`,
   `[:ex_nominatim, :rate_limit, :deny]`,
@@ -43,6 +55,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `test_adapter` support for plain plug modules (not just `{Req.Test, name}`),
   enabling cross-process HTTP stubbing for `Task.async_stream` tests.
 - Depends on `telemetry ~> 1.0` and optionally `geohash ~> 1.0`.
+- `llms.txt` at project root — self-contained AI summary of the library API surface.
+- SPDX copyright header to `Report` module.
+- Coverage threshold set to 80% in `mix.exs`.
+- `config/config.exs` — documented cache configuration defaults.
+- Updated `DESIGN.md` with rate limiting architecture, caching, and data flow documentation.
 
 ### Changed
 
@@ -50,10 +67,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Previously mixed shapes (bare atoms, tagged tuples, structs) have been consolidated into
   a single map pattern. See DESIGN.md for the full mapping.
 - **Breaking**: `ExNominatim.default_config/0` expanded with new keys: `:timeout`,
-  `:user_agent`, `:retry`, `:circuit_breaker`, `:max_concurrency`, `:cache_errors`,
-  `:cache_error_ttl`.
+  `:user_agent`, `:retry`, `:circuit_breaker`, `:max_concurrency`, `:cache`,
+  `:cache_errors`, `:cache_error_ttl`, `:rate_limit`.
 - `Config`-specific keys updated: `:timeout`, `:user_agent`, `:retry`, `:circuit_breaker`,
-  `:max_concurrency`, `:cache_errors`, `:cache_error_ttl` added to filter list.
+  `:max_concurrency`, `:cache`, `:cache_errors`, `:cache_error_ttl`, `:rate_limit`,
+  `:test_adapter` added to filter list.
+- Relaxed Req dependency to `~> 0.5`.
 
 ### Fixed
 
@@ -73,49 +92,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `healthy?/1` tests in `client_test.exs`.
 - All ETS tables pre-initialized in `setup` blocks where needed to avoid
   ownership races with concurrent task processes.
-
-## [2.4.0] - 2026-06-30
-
-### Added
-
-- Rate limiting via `ExNominatim.RateLimiter` — zero-dependency, ETS-backed, best-effort.
-- `:rate_limit` config option (`:auto` | `true` | `false` | integer).
-  - `:auto` (default): 1 req/s enforced for `nominatim.openstreetmap.org`, disabled for other servers.
-  - `true`: 1 req/s enforced for all servers.
-  - `false`: rate limiting disabled entirely.
-  - integer: N req/s enforced for all servers (e.g. `rate_limit: 5` for 5 req/s).
-- Rate limiter sits between cache miss and HTTP dispatch — cached requests bypass it.
-- 7 new unit tests covering RateLimiter module and Client integration.
-- Updated DESIGN.md with rate limiting architecture and updated data flow.
-
-## [2.3.0] - 2026-06-30
-
-### Added
-
-- Optional caching via Cachex v4.x (`:cache` option on all endpoint functions).
-  - `ExNominatim.Cache` protocol for custom cache adapters.
-  - `ExNominatim.CachexCache` built-in adapter.
-  - `ExNominatim.TestCache` for isolated cache testing.
-  - Cache protocol `defimpl for: Atom` with runtime `apply/3` dispatch.
-  - Cache key based on endpoint and normalized query parameters.
-  - Only successful results cached; errors never cache.
-- `:test_adapter` option for isolated HTTP stubbing with `Req.Test`.
-  - Works with all five endpoints (`search`, `reverse`, `lookup`, `details`, `status`).
-  - Enables no-network unit testing of the full request pipeline.
-- `config/config.exs` — documented cache configuration defaults.
-- `llms.txt` at project root — self-contained AI summary of the library API surface.
-- SPDX copyright header to `Report` module.
-- Coverage threshold set to 80% in `mix.exs`.
-
-### Changed
-
-- `:cache` and `:test_adapter` are filtered from query params and struct construction (config-only keys).
-
-## [2.2.0] - 2025-06-27
-
-### Changed
-
-- Relaxed Req dependency to `~> 0.5`.
 
 ## [2.1.0] - 2025-05-20
 
@@ -174,11 +150,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ExNominatim.Client` for request preparation and dispatch.
 - ExDelegated public API via `ExNominatim` module.
 
-[Unreleased]: https://github.com/waseigo/ex_nominatim/compare/v2.4.0...HEAD
-[3.0.0]: https://github.com/waseigo/ex_nominatim/compare/v2.4.0...v3.0.0
-[2.4.0]: https://github.com/waseigo/ex_nominatim/compare/v2.3.0...v2.4.0
-[2.3.0]: https://github.com/waseigo/ex_nominatim/compare/v2.2.0...v2.3.0
-[2.2.0]: https://github.com/waseigo/ex_nominatim/compare/v2.1.0...v2.2.0
+[Unreleased]: https://github.com/waseigo/ex_nominatim/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/waseigo/ex_nominatim/compare/v2.1.0...v3.0.0
 [2.1.0]: https://github.com/waseigo/ex_nominatim/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/waseigo/ex_nominatim/compare/v1.1.4...v2.0.0
 [1.1.4]: https://github.com/waseigo/ex_nominatim/compare/v1.1.3...v1.1.4
