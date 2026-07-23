@@ -9,7 +9,7 @@ defmodule ExNominatim.Report do
   """
   def process({:ok, %Req.Response{body: body} = resp}) do
     p = {
-      (resp.status == 200 and not detect_error_in_body(body) && :ok) || :error,
+      ((resp.status == 200 and not detect_error_in_body(body)) && :ok) || :error,
       %{status: resp.status, body: resp.body}
     }
 
