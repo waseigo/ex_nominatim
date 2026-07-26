@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.1] - 2026-07-26
+
+### Fixed
+
+- `accept_language` param serialized as `accept_language` instead of `accept-language`,
+  causing Nominatim to silently ignore it and return results in the default language.
+
 ## [3.0.0] - 2026-07-01
 
 ### Added
@@ -140,7 +147,8 @@ base_delay: 100, max_delay: 5000, jitter: true]`. Retries on transport errors,
 - `ExNominatim.Client` for request preparation and dispatch.
 - ExDelegated public API via `ExNominatim` module.
 
-[Unreleased]: https://github.com/waseigo/ex_nominatim/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/waseigo/ex_nominatim/compare/v3.0.1...HEAD
+[3.0.1]: https://github.com/waseigo/ex_nominatim/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/waseigo/ex_nominatim/compare/v2.1.0...v3.0.0
 [2.1.0]: https://github.com/waseigo/ex_nominatim/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/waseigo/ex_nominatim/compare/v1.1.4...v2.0.0
