@@ -366,9 +366,18 @@ defmodule ExNominatim.Client do
   end
 
   defp keep_query_params(m) when is_map(m) do
-    Map.filter(m, fn {k, v} ->
+    m
+    |> Map.filter(fn {k, v} ->
       not (is_nil(v) or k in (@validation_keys ++ @config_specific_keys))
     end)
+    |> rename_key(:accept_language, :"accept-language")
+  end
+
+  defp rename_key(m, from, to) do
+    case Map.pop(m, from) do
+      {nil, rest} -> rest
+      {value, rest} -> Map.put(rest, to, value)
+    end
   end
 
   # --- Rate limiting ---

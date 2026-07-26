@@ -4,7 +4,7 @@ defmodule Nominatim.MixProject do
   def project do
     [
       app: :ex_nominatim,
-      version: "3.0.0",
+      version: "3.0.1",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       description: description(),
