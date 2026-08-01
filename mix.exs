@@ -4,7 +4,7 @@ defmodule Nominatim.MixProject do
   def project do
     [
       app: :ex_nominatim,
-      version: "3.0.1",
+      version: "3.1.0",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       description: description(),
@@ -52,7 +52,7 @@ defmodule Nominatim.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:req, "~> 0.5.0"},
+      {:req, "~> 0.7"},
       {:telemetry, "~> 1.0"},
       {:geohash, "~> 1.0", optional: true},
       {:cachex, "~> 4.1", only: [:dev, :test], runtime: false},

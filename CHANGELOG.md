@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-08-01
+
+### Changed
+
+- Upgraded `req` dependency from `~> 0.5.0` to `~> 0.7`.
+  Resolves to `req 0.7.2`, which patches CVE-2026-49755 (decompression bomb DoS, CVSS 8.2)
+  and CVE-2026-49756 (multipart header injection, CVSS 2.1) that affect all 0.5.x versions.
+  No API breakage — the public Req APIs used by ExNominatim (`Req.new/1`, `Req.merge/2`,
+  `Req.request/1`, `Req.Response`) are unchanged between 0.5.x and 0.7.x.
+  All 188 tests pass.
+
 ## [3.0.1] - 2026-07-26
 
 ### Fixed
